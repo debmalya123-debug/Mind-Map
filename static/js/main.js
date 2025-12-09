@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const queryRes = document.getElementById('query-res');
 
     // D3 Variables
-    let svg, g, tree, root;
+    let svg, g, tree, root, zoom; // Added zoom
     let width, height;
     let selectedData = null;
     let i = 0;
@@ -25,13 +25,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         d3.select("#viz-container").selectAll("*").remove();
 
+        // Initialize Zoom Behavior
+        zoom = d3.zoom().scaleExtent([0.1, 4]).on("zoom", (e) => {
+            g.attr("transform", e.transform);
+        });
+
         svg = d3.select("#viz-container")
             .append("svg")
             .attr("width", width)
             .attr("height", height)
-            .call(d3.zoom().scaleExtent([0.1, 4]).on("zoom", (e) => {
-                g.attr("transform", e.transform);
-            }))
+            .call(zoom)
             .on("dblclick.zoom", null);
 
         g = svg.append("g")
@@ -456,14 +459,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if(generateNoteBtn) generateNoteBtn.onclick = generateNote;
     if(closeNoteBtn) closeNoteBtn.onclick = () => noteSidebar.classList.add('hidden');
     
+    
     document.getElementById('expand-all').onclick = () => {
-        if(root) { expand(root); update(root); }
+        if(root) { 
+            expand(root); 
+            update(root); 
+            centerNode(root);
+        }
     };
     document.getElementById('collapse-all').onclick = () => {
-        if(root && root.children) { root.children.forEach(collapse); update(root); }
+        if(root) { 
+            collapse(root); // Collapse ROOT to show only single node
+            update(root); 
+            centerNode(root);
+        }
     };
-    document.getElementById('zoom-in').onclick = () => svg.transition().call(d3.zoom().scaleBy, 1.2);
-    document.getElementById('zoom-out').onclick = () => svg.transition().call(d3.zoom().scaleBy, 0.8);
+    document.getElementById('zoom-in').onclick = () => svg.transition().call(zoom.scaleBy, 1.2);
+    document.getElementById('zoom-out').onclick = () => svg.transition().call(zoom.scaleBy, 0.8);
     document.getElementById('fit').onclick = () => {
         if(root) centerNode(root); // Simple reset to root
     };
