@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
+    console.log("Mind Map App: main.js loaded successfully (v2)");
     // Elements
     const syllabusInput = document.getElementById('syllabus-input');
     const generateBtn = document.getElementById('generate-btn');
@@ -72,43 +73,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const nodes = treeData.descendants();
         const links = treeData.links();
 
-        // ** Dynamic Horizontal Spacing Logic **
-        // 1. Calculate max width for each depth level
-        const depthWidths = {};
-        nodes.forEach(d => {
-            const w = getTextWidth(d.data.label) + 60; // Text + Padding
-            if (!depthWidths[d.depth] || w > depthWidths[d.depth]) {
-                depthWidths[d.depth] = w;
-            }
-        });
-
-        // 2. Accumulate widths to determine X position (Horizontal) per depth
-        // Note: d.y is Horizontal in our logic, d.x is Vertical
-        const depthPositions = {};
-        let currentX = 0;
-        // Find max depth
-        const maxDepth = Math.max(...nodes.map(n => n.depth));
-        
-        for(let i = 0; i <= maxDepth; i++) {
-            depthPositions[i] = currentX;
-            // Add current level's max width + gap for next level
-            currentX += (depthWidths[i] || 150) + 40; // 40px gap between columns
-        }
-
-        // 3. Assign calculated horizontal position
-        nodes.forEach(d => { 
-            // Only update y (horizontal) if not currently being dragged/fixed?
-            // For now, force it to dynamic unless specifically overridden?
-            // Let's just set it based on depth.
-            // If we want drag to persist x/y changes, we need to check if d.x/d.y corresponds to layout
-            // But this is a tree re-layout. Let's start with dynamic layout.
-            // "y" in tree layout usually corresponds to depth.
-            
-            // If the node has manually set coordinates from a drag, we might honor them.
-            // BUT, collapsing/expanding (update) usually resets trees.
-            // Let's implement the dynamic width first.
-            d.y = depthPositions[d.depth]; 
-        });
+        // ** Dynamic Horizontal Spacing Logic REMOVED **
+        // Retaining standard D3 Tree structure for cleanliness and reliability.
+        // d.y (horizontal) is automatically determined by source.y + nodeSize width.
+        // d.x (vertical) is determined by nodeSize height.
 
         // ****************** Nodes Section ******************
 
@@ -252,7 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
         update(d);
         
         // Also update selection panel
-        selectNode(d.data);
+        selectNode(d); // Pass D3 Node, not just data
         event.stopPropagation();
     }
 
@@ -305,7 +273,14 @@ document.addEventListener('DOMContentLoaded', () => {
         rootNode.y0 = 0;
 
         // Tree Layout Size
-        tree = d3.tree().nodeSize([60, 250]); 
+        // Increased node separation for better readability
+        // nodeSize is [height, width] for horizontal trees if standard,
+        // but for d3.tree, it's [y, x] in logical coords? 
+        // Actually d3.tree().nodeSize([h, w]) sets the spacing.
+        // We utilize dynamic horizontal (y), so the second value matters less for logic,
+        // but the first value (height) determines vertical separation.
+        // nodeSize is [height, width] for standard tree (x=vertical, y=horizontal in our transform)
+        tree = d3.tree().nodeSize([80, 400]); 
 
         root = rootNode;
         
@@ -319,7 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Initial Center
         centerNode(root);
     }
-
+    
     function centerNode(source) {
         // Center the view on the node
         const t = d3.zoomTransform(svg.node());
@@ -331,6 +306,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function generate() {
+        console.log("Generate button clicked");
         const text = syllabusInput.value.trim();
         if(!text) return alert("Text required.");
         
@@ -359,32 +335,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeNoteBtn = document.getElementById('close-note-btn');
     const noteControls = document.getElementById('note-controls');
 
-    // ... (rest of resize handler)
-
     function selectNode(d) {
-        selectedData = d;
-        nodeLabel.textContent = d.label;
-        nodeType.textContent = d.type;
+        selectedData = d; // Now storing D3 Node
+        const data = d.data;
+        nodeLabel.textContent = data.label;
+        nodeType.textContent = data.type;
         nodeDetails.classList.remove('hidden');
         queryRes.textContent = ""; queryInput.value = "";
         
-        // Open Note Sidebar
-        openNoteSidebar(d);
+        openNoteSidebar(data); // Note sidebar uses ID
     }
 
-    function openNoteSidebar(d) {
+    function openNoteSidebar(data) {
         noteSidebar.classList.remove('hidden');
-        
-        // Check Cache
-        if(nodeNotes[d.id]) {
-            renderNote(nodeNotes[d.id]);
-            noteControls.classList.add('hidden'); // Hide generate button if exists
-            // Optional: Add "Regenerate" button? For now simplest spec.
+        if(nodeNotes[data.id]) {
+            renderNote(nodeNotes[data.id]);
+            noteControls.classList.add('hidden');
         } else {
-            noteContent.innerHTML = "<p><em>No notes generated yet. Click below to create study notes.</em></p>";
+            noteContent.innerHTML = "<p><em>No notes generated yet...</em></p>";
             noteControls.classList.remove('hidden');
         }
     }
+
+    // ... (renderNote) ...
 
     function renderNote(markdown) {
         noteContent.innerHTML = marked.parse(markdown);
@@ -396,6 +369,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function generateNote() {
         if(!selectedData) return;
+        const d = selectedData;
+        const data = d.data;
+
+        // Construct Context
+        const parentLabel = d.parent ? d.parent.data.label : "None";
+        // Root is the last ancestor
+        const rootLabel = d.ancestors ? d.ancestors().pop().data.label : "Root";
         
         generateNoteBtn.disabled = true;
         generateNoteBtn.textContent = "Generating Notes...";
@@ -405,14 +385,23 @@ document.addEventListener('DOMContentLoaded', () => {
             const r = await fetch('/generate_note', {
                 method:'POST', headers:{'Content-Type':'application/json'},
                 body:JSON.stringify({
-                    topic: selectedData.label,
-                    context: `Parent: ${selectedData.parent || 'Root'}`
+                    topic: data.label,
+                    context: `Parent Topic: ${parentLabel}. Main Subject: ${rootLabel}.`
                 })
             });
-            const res = await r.json();
+            
+            // Handle non-JSON responses (CRITICAL FIX)
+            const text = await r.text();
+            let res;
+            try {
+                res = JSON.parse(text);
+            } catch(jsonErr) {
+                console.error("Server returned non-JSON:", text);
+                throw new Error(`Server Error: ${text.substring(0, 100)}...`);
+            }
             
             if(res.note) {
-                nodeNotes[selectedData.id] = res.note;
+                nodeNotes[data.id] = res.note;
                 renderNote(res.note);
                 noteControls.classList.add('hidden');
             } else {
@@ -421,7 +410,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch(e) {
             console.error(e);
-            noteContent.innerHTML = "Error connecting to AI.";
+            noteContent.innerHTML = `Error: ${e.message || "Connecting to AI"}`;
         } finally {
             generateNoteBtn.disabled = false;
             generateNoteBtn.textContent = "Generate Note";
@@ -430,24 +419,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function ask() {
         if(!selectedData) return;
+        const d = selectedData;
+        const data = d.data; // D3 Node -> Data
         const q = queryInput.value.trim();
         if(!q) return;
+
+        const parentLabel = d.parent ? d.parent.data.label : "None";
+        const rootLabel = d.ancestors ? d.ancestors().pop().data.label : "Root";
         
         queryBtn.textContent = "...";
         try {
             const r = await fetch('/node_query', {
                 method:'POST', headers:{'Content-Type':'application/json'},
                 body:JSON.stringify({
-                    node_label: selectedData.label,
+                    node_label: data.label,
                     query: q,
-                    context: `Parent: ${selectedData.parent || 'root'}`
+                    context: `Parent Topic: ${parentLabel}. Main Subject: ${rootLabel}.`
                 })
             });
-            const d = await r.json();
+            const res = await r.json();
             // Render Answer with Markdown
-            const md = d.response || "No response.";
+            const md = res.response || "No response.";
             queryRes.innerHTML = marked.parse(md);
-            // Optional: MathJax trigger if needed, though Ask AI is usually short text
             if(window.MathJax) MathJax.typesetPromise([queryRes]);
         } catch(e) {
             console.error(e);

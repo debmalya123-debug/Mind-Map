@@ -18,7 +18,7 @@ A powerful, AI-powered Mind Mapping tool that transforms syllabus text into inte
 ## 🛠️ Tech Stack
 
 - **Backend**: Python, Flask
-- **AI Engine**: Google Gemini API (gemini-2.5-flash-lite / gemini-1.5-flash)
+- **AI Engine**: Google Gemini API (Primary: `gemini-2.5-flash-lite`)
 - **Frontend**: HTML5, CSS3 (Custom Glassmorphism), D3.js (v7)
 - **Rendering**: Marked.js (Markdown), MathJax (LaTeX Equations)
 
@@ -59,6 +59,18 @@ A powerful, AI-powered Mind Mapping tool that transforms syllabus text into inte
 2.  **Explore**: Click nodes to expand/collapse sub-topics. Drag nodes to rearrange them.
 3.  **Ask Questions**: Click a node to select it. Use the "Ask AI" box in the left panel to ask clarifying questions about that specific topic.
 4.  **Create Notes**: With a node selected, click "Generate Note" in the right sidebar (if closed, clicking a node opens it). The AI will auto-generate a detailed study guide for you.
+
+## 🔧 Troubleshooting
+
+- **"Generate Map" Button Not Working?**
+
+  - Ensure you have a valid `.env` file with `GEMINI_API_KEY`.
+  - Hard refresh your browser (`Ctrl+F5`) to clear old JavaScript cache.
+  - Check the terminal for any Python errors.
+
+- **"Error connecting to AI" in Notes?**
+  - The app attempts to use `gemini-2.5-flash-lite` first. If it fails (e.g., overloaded), it falls back to `gemini-1.5-flash`.
+  - Check your internet connection.
 
 ## 🤝 Contributing
 

@@ -4,7 +4,7 @@ import google.generativeai as genai
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
 import dataclasses
-import typing_extensions as typing
+import typing
 
 # Load environment variables
 load_dotenv(override=True)
@@ -40,7 +40,7 @@ GENERATION_CONFIG = {
 
 # Initialize model with fallback strategy
 def get_model():
-    models_to_try = ["gemini-2.5-flash-lite", "gemini-2.0-flash-exp", "gemini-1.5-flash"]
+    models_to_try = ["gemini-2.5-flash-lite", "gemini-1.5-flash", "gemini-2.0-flash-exp"]
     
     for model_name in models_to_try:
         try:
@@ -49,9 +49,6 @@ def get_model():
                 model_name=model_name,
                 generation_config=GENERATION_CONFIG
             )
-            # Test the model with a dummy generation to ensure it works
-            # Note: This might add a small delay startup, but ensures validity.
-            # model.generate_content("test") 
             print(f"Successfully initialized: {model_name}")
             return model
         except Exception as e:
@@ -74,6 +71,7 @@ def generate_mindmap():
 
     data = request.get_json()
     syllabus_text = data.get('syllabus', '')
+    print(f"Received Syllabus: {syllabus_text[:50]}...") # Debug
 
     if not syllabus_text:
         return jsonify({"error": "No syllabus text provided"}), 400
@@ -102,11 +100,23 @@ def generate_mindmap():
 
     try:
         response = model.generate_content(prompt)
+        print(f"AI Response Status: {response.candidates[0].finish_reason}") # Debug
+        raw_text = response.text
+        print(f"Raw AI Output: {raw_text[:200]}...") # Debug
+
+        # Robust JSON cleaning
+        clean_text = raw_text.strip()
+        if clean_text.startswith("```json"):
+            clean_text = clean_text[7:]
+        if clean_text.endswith("```"):
+            clean_text = clean_text[:-3]
+        
         # Parse the JSON response
-        result = json.loads(response.text)
+        result = json.loads(clean_text)
         return jsonify(result)
     except Exception as e:
         print(f"Error generating mind map: {e}")
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 @app.route('/node_query', methods=['POST'])
@@ -142,30 +152,52 @@ def node_query():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/generate_note', methods=['POST'])
+@app.route('/generate_note', methods=['POST'])
 def generate_note():
-    data = request.json
-    topic = data.get('topic', '')
-    context = data.get('context', '')
-    
-    prompt = f"""
-    Create a comprehensive study note for the topic: '{topic}'.
-    Context from mind map: {context}
-    
-    The note should be in Markdown format and include:
-    1.  **Overview**: A clear, concise introduction.
-    2.  **Key Concepts**: Bullet points of main ideas.
-    3.  **Detailed Explanation**: In-depth analysis.
-    4.  **Tables**: Compare/Contrast or data tables if applicable.
-    5.  **Equations/Math**: Use LaTeX formatting (e.g., $E=mc^2$) where relevant.
-    
-    Make it educational, structured, and easy to read.
-    """
-    
     try:
-        model = genai.GenerativeModel("gemini-2.5-flash-lite") # Use flash for speed/docs
-        response = model.generate_content(prompt)
-        return jsonify({'note': response.text})
+        data = request.get_json(force=True, silent=True)
+        if not data:
+            return jsonify({'note': "Error: Invalid JSON data received."}), 400
+            
+        topic = data.get('topic', '')
+        context = data.get('context', '')
+        
+        prompt = f"""
+        Create a comprehensive study note for the topic: '{topic}'.
+        Context from mind map: {context}
+        
+        The note should be in Markdown format and include:
+        1.  **Overview**: A clear, concise introduction.
+        2.  **Key Concepts**: Bullet points of main ideas.
+        3.  **Detailed Explanation**: In-depth analysis.
+        4.  **Tables**: Compare/Contrast or data tables if applicable.
+        5.  **Equations/Math**: Use LaTeX formatting (e.g., $E=mc^2$) where relevant.
+        
+        Make it educational, structured, and easy to read.
+        """
+        
+        print(f"\n[DEBUG] Sending Prompt to Gemini:\n{prompt}\n[DEBUG] End Prompt\n")
+
+        # Try requested model first, then fallback
+        models = ["gemini-2.5-flash-lite", "gemini-1.5-flash"]
+        last_error = None
+        
+        for m in models:
+            try:
+                model = genai.GenerativeModel(m)
+                response = model.generate_content(prompt)
+                return jsonify({'note': response.text})
+            except Exception as inner_e:
+                print(f"Model {m} failed: {inner_e}")
+                last_error = inner_e
+                continue
+
+        raise last_error if last_error else Exception("All models failed")
+
     except Exception as e:
+        print(f"Error generating note: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'note': f"Error generating note: {str(e)}"}), 500
 
 if __name__ == '__main__':
