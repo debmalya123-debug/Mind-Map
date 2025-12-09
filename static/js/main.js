@@ -72,8 +72,43 @@ document.addEventListener('DOMContentLoaded', () => {
         const nodes = treeData.descendants();
         const links = treeData.links();
 
-        // Normalize for fixed-depth (Side Flowing)
-        nodes.forEach(d => { d.y = d.depth * 280; }); // Horizontal spacing
+        // ** Dynamic Horizontal Spacing Logic **
+        // 1. Calculate max width for each depth level
+        const depthWidths = {};
+        nodes.forEach(d => {
+            const w = getTextWidth(d.data.label) + 60; // Text + Padding
+            if (!depthWidths[d.depth] || w > depthWidths[d.depth]) {
+                depthWidths[d.depth] = w;
+            }
+        });
+
+        // 2. Accumulate widths to determine X position (Horizontal) per depth
+        // Note: d.y is Horizontal in our logic, d.x is Vertical
+        const depthPositions = {};
+        let currentX = 0;
+        // Find max depth
+        const maxDepth = Math.max(...nodes.map(n => n.depth));
+        
+        for(let i = 0; i <= maxDepth; i++) {
+            depthPositions[i] = currentX;
+            // Add current level's max width + gap for next level
+            currentX += (depthWidths[i] || 150) + 40; // 40px gap between columns
+        }
+
+        // 3. Assign calculated horizontal position
+        nodes.forEach(d => { 
+            // Only update y (horizontal) if not currently being dragged/fixed?
+            // For now, force it to dynamic unless specifically overridden?
+            // Let's just set it based on depth.
+            // If we want drag to persist x/y changes, we need to check if d.x/d.y corresponds to layout
+            // But this is a tree re-layout. Let's start with dynamic layout.
+            // "y" in tree layout usually corresponds to depth.
+            
+            // If the node has manually set coordinates from a drag, we might honor them.
+            // BUT, collapsing/expanding (update) usually resets trees.
+            // Let's implement the dynamic width first.
+            d.y = depthPositions[d.depth]; 
+        });
 
         // ****************** Nodes Section ******************
 
@@ -85,7 +120,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const nodeEnter = node.enter().append('g')
             .attr('class', 'node')
             .attr("transform", d => `translate(${source.y0 || 0},${source.x0 || 0})`)
-            .on('click', click);
+            .on('click', click)
+            .call(d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended));
 
         // Add Rectangles
         nodeEnter.append('rect')
@@ -127,7 +166,7 @@ document.addEventListener('DOMContentLoaded', () => {
                  return d._children ? "#a55eea" : "#2d98da";
             })
             .style("opacity", 1)
-            .attr('cursor', 'pointer');
+            .attr('cursor', 'grab');
 
         nodeUpdate.select('text')
             .style("fill-opacity", 1);
@@ -178,6 +217,26 @@ document.addEventListener('DOMContentLoaded', () => {
             d.x0 = d.x;
             d.y0 = d.y;
         });
+    }
+
+    // Drag Functions
+    function dragstarted(event, d) {
+        d3.select(this).raise().attr("cursor", "grabbing");
+    }
+
+    function dragged(event, d) {
+        d.x = event.y;
+        d.y = event.x;
+        // Update Node Position immediately
+        d3.select(this).attr("transform", `translate(${d.y},${d.x})`);
+        
+        // Update Links connected to this node
+        // We need to re-select links and update their 'd' attribute
+        g.selectAll('path.link').attr('d', l => diagonal(l.source, l.target));
+    }
+
+    function dragended(event, d) {
+        d3.select(this).attr("cursor", "grab");
     }
 
     // Toggle children on click.
@@ -332,4 +391,28 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('fit').onclick = () => {
         if(root) centerNode(root); // Simple reset to root
     };
+
+    // Resize Handler
+    window.addEventListener('resize', () => {
+        const container = document.getElementById('viz-container');
+        if(svg && container) {
+            width = container.clientWidth;
+            height = container.clientHeight;
+            svg.attr("width", width).attr("height", height);
+            
+            // Re-center on root if it exists
+            if(root) {
+                 // Re-calculate root positions if needed or just center view
+                 // Since tree is static, we just need to update view center
+                 // But ideally we should re-run update() if layout depends on width/height
+                 // Our layout is fixed-size node based, so just centering is enough.
+                 // centerNode(root); // Might be jarring, maybe just let user pan?
+                 // Let's just update the root position relative to new height
+                 root.x0 = height / 2;
+                 // But update() uses root.x0 for transitions... 
+                 // Let's just re-center view on root 
+                 centerNode(root); 
+            }
+        }
+    });
 });

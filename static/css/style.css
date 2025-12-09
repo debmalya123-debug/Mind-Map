@@ -373,3 +373,38 @@ label { display: block; font-size: 0.75rem; text-transform: uppercase; color: va
     stroke-width: 1.5px;
     fill: none;
 }
+
+/* Mobile Optimization */
+@media (max-width: 768px) {
+    .app {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        width: 100%;
+        height: 45%; 
+        order: 2; /* Bottom */
+        border-right: none;
+        border-top: 1px solid var(--glass-border);
+        padding: 16px;
+    }
+
+    .main {
+        height: 55%;
+        order: 1; /* Top */
+    }
+
+    .controls {
+        bottom: 16px;
+        right: 16px;
+        flex-direction: column;
+    }
+
+    .btn-icon {
+        width: 36px; height: 36px; /* Slightly smaller or kept accessible */
+    }
+
+    h1 {
+        font-size: 1.25rem;
+    }
+}
