@@ -1,0 +1,335 @@
+document.addEventListener('DOMContentLoaded', () => {
+    // Elements
+    const syllabusInput = document.getElementById('syllabus-input');
+    const generateBtn = document.getElementById('generate-btn');
+    const loading = document.getElementById('loading');
+    const nodeDetails = document.getElementById('node-details');
+    const nodeLabel = document.getElementById('node-label');
+    const nodeType = document.getElementById('node-type');
+    const queryInput = document.getElementById('query-input');
+    const queryBtn = document.getElementById('query-btn');
+    const queryRes = document.getElementById('query-res');
+
+    // D3 Variables
+    let svg, g, tree, root;
+    let width, height;
+    let selectedData = null;
+    let i = 0;
+    const duration = 750;
+
+    function initD3() {
+        const container = document.getElementById('viz-container');
+        width = container.clientWidth;
+        height = container.clientHeight;
+
+        d3.select("#viz-container").selectAll("*").remove();
+
+        svg = d3.select("#viz-container")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .call(d3.zoom().scaleExtent([0.1, 4]).on("zoom", (e) => {
+                g.attr("transform", e.transform);
+            }))
+            .on("dblclick.zoom", null);
+
+        g = svg.append("g")
+            .attr("transform", `translate(${100},${height/2})`); 
+            // Initial translation to the left-center
+    }
+
+    // Helper: Text Width
+    function getTextWidth(text, font="13px Outfit") {
+        const c = document.createElement("canvas");
+        const ctx = c.getContext("2d");
+        ctx.font = font;
+        return ctx.measureText(text).width;
+    }
+
+    // Creates a simple straight line path from parent RIGHT to child LEFT
+    function diagonal(s, d) {
+        // Source X (Horizontal): y position + half width (Right Edge)
+        const sWidth = s.width || 0;
+        const dWidth = d.width || 0;
+
+        const sx = s.y + sWidth / 2;
+        const sy = s.x;
+        
+        // Target X (Horizontal): y position - half width (Left Edge)
+        const tx = d.y - dWidth / 2;
+        const ty = d.x;
+
+        // Simple Straight Line
+        return `M ${sx} ${sy} L ${tx} ${ty}`;
+    }
+
+    // --- Update Pattern ---
+    function update(source) {
+        // Assigns the x and y position for the nodes
+        const treeData = tree(root);
+
+        // Compute the new tree layout.
+        const nodes = treeData.descendants();
+        const links = treeData.links();
+
+        // Normalize for fixed-depth (Side Flowing)
+        nodes.forEach(d => { d.y = d.depth * 280; }); // Horizontal spacing
+
+        // ****************** Nodes Section ******************
+
+        // Update the nodes...
+        const node = g.selectAll('g.node')
+            .data(nodes, d => d.id || (d.id = ++i));
+
+        // Enter any new modes at the parent's previous position.
+        const nodeEnter = node.enter().append('g')
+            .attr('class', 'node')
+            .attr("transform", d => `translate(${source.y0 || 0},${source.x0 || 0})`)
+            .on('click', click);
+
+        // Add Rectangles
+        nodeEnter.append('rect')
+            .attr('class', 'node-rect')
+            .attr('width', 1e-6)
+            .attr('height', 1e-6)
+            .attr("x", 0) 
+            .attr("y", -20)
+            .attr('rx', 12)
+            .attr('ry', 12)
+            .style("fill", d => d._children ? "#a55eea" : "#45aaf2") 
+            .style("opacity", 0);
+
+        // Add Text - Centered
+        nodeEnter.append('text')
+            .attr("dy", ".35em")
+            .attr("text-anchor", "middle")
+            .text(d => d.data.label)
+            .style("fill-opacity", 0);
+
+        // UPDATE
+        const nodeUpdate = nodeEnter.merge(node);
+
+        // Transition to the proper position for the node
+        nodeUpdate.transition().duration(duration)
+            .attr("transform", d => `translate(${d.y},${d.x})`);
+
+        // Update the node attributes and style
+        nodeUpdate.select('rect.node-rect')
+            .attr('width', d => {
+                d.width = getTextWidth(d.data.label) + 24; // Store for links
+                return d.width;
+            })
+            .attr('height', 36)
+            .attr('x', d => -d.width / 2) 
+            .attr('y', -18) 
+            .style("fill", d => {
+                 if(d.data.type === 'root') return "#ff6b6b"; 
+                 return d._children ? "#a55eea" : "#2d98da";
+            })
+            .style("opacity", 1)
+            .attr('cursor', 'pointer');
+
+        nodeUpdate.select('text')
+            .style("fill-opacity", 1);
+
+        // Remove any exiting nodes
+        const nodeExit = node.exit().transition().duration(duration)
+            .attr("transform", d => `translate(${source.y},${source.x})`)
+            .remove();
+
+        nodeExit.select('rect')
+            .attr('width', 1e-6)
+            .attr('height', 1e-6);
+
+        nodeExit.select('text')
+            .style("fill-opacity", 1e-6);
+
+        // ****************** Links Section ******************
+
+        // Update the links...
+        const link = g.selectAll('path.link')
+            .data(links, d => d.target.id);
+
+        // Enter any new links at the parent's previous position.
+        const linkEnter = link.enter().insert('path', "g")
+            .attr("class", "link")
+            .attr('d', d => {
+                const o = {x: source.x0 || 0, y: source.y0 || 0, width: 0};
+                return diagonal(o, o);
+            });
+
+        // UPDATE
+        const linkUpdate = linkEnter.merge(link);
+
+        // Transition back to the parent element position
+        linkUpdate.transition().duration(duration)
+            .attr('d', d => diagonal(d.source, d.target));
+
+        // Remove any exiting links
+        const linkExit = link.exit().transition().duration(duration)
+            .attr('d', d => {
+                const o = {x: source.x, y: source.y, width: 0}; 
+                return diagonal(o, o);
+            })
+            .remove();
+
+        // Store the old positions for transition.
+        nodes.forEach(d => {
+            d.x0 = d.x;
+            d.y0 = d.y;
+        });
+    }
+
+    // Toggle children on click.
+    function click(event, d) {
+        if (d.children) {
+            d._children = d.children;
+            d.children = null;
+        } else {
+            d.children = d._children;
+            d._children = null;
+        }
+        update(d);
+        
+        // Also update selection panel
+        selectNode(d.data);
+        event.stopPropagation();
+    }
+
+    // Collapse All
+    function collapse(d) {
+        if(d.children) {
+            d._children = d.children;
+            d._children.forEach(collapse);
+            d.children = null;
+        }
+    }
+
+    // Expand All
+    function expand(d) {
+        if(d._children) {
+            d.children = d._children;
+            d._children = null;
+        }
+        if(d.children) d.children.forEach(expand);
+    }
+
+    function processData(data) {
+        // Convert flat List to Hierarchy
+        // Strategy: Link via ID/Parent, then d3.stratify
+        
+        // Ensure Root
+        if(!data.nodes.find(n => n.id === 'root')) {
+            data.nodes.push({id:'root', label: data.title, type:'root'});
+        }
+        
+        // Validate Parents
+        const ids = new Set(data.nodes.map(n => n.id));
+        data.nodes.forEach(n => {
+            if(n.id !== 'root') {
+                 if(!n.parent || n.parent === 'title' || !ids.has(n.parent)) {
+                     n.parent = 'root';
+                 }
+            } else {
+                n.parent = ""; // Root has no parent (stratify requirement)
+            }
+        });
+
+        // Stratify
+        const rootNode = d3.stratify()
+            .id(d => d.id)
+            .parentId(d => d.parent)
+            (data.nodes);
+
+        rootNode.x0 = height / 2;
+        rootNode.y0 = 0;
+
+        // Tree Layout Size
+        tree = d3.tree().nodeSize([60, 250]); 
+
+        root = rootNode;
+        
+        // Start Collapsed
+        if(root.children) {
+            root.children.forEach(collapse);
+        }
+
+        update(root);
+        
+        // Initial Center
+        centerNode(root);
+    }
+
+    function centerNode(source) {
+        // Center the view on the node
+        const t = d3.zoomTransform(svg.node());
+        const scale = t.k;
+        const x = -source.y0 * scale + 150; // Shift right a bit
+        const y = -source.x0 * scale + height / 2;
+        
+        svg.transition().duration(750).call(d3.zoom().transform, d3.zoomIdentity.translate(x, y).scale(scale));
+    }
+
+    async function generate() {
+        const text = syllabusInput.value.trim();
+        if(!text) return alert("Text required.");
+        
+        loading.classList.remove('hidden');
+        try {
+            const r = await fetch('/generate_mindmap', {
+                method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({syllabus:text})
+            });
+            if(!r.ok) throw new Error("API Error");
+            const d = await r.json();
+            initD3();
+            processData(d);
+        } catch(e) {
+            console.error(e);
+            alert("Error");
+        } finally {
+            loading.classList.add('hidden');
+        }
+    }
+
+    function selectNode(d) {
+        selectedData = d;
+        nodeLabel.textContent = d.label;
+        nodeType.textContent = d.type;
+        nodeDetails.classList.remove('hidden');
+        queryRes.textContent = ""; queryInput.value = "";
+    }
+    
+    // API Query
+    async function ask() {
+        if(!selectedData) return;
+        const q = queryInput.value.trim();
+        if(!q) return;
+        queryBtn.textContent = "...";
+        try {
+            const r = await fetch('/node_query', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({node_label:selectedData.label, query:q, context:""})
+            });
+            const d = await r.json();
+            queryRes.textContent = d.response;
+        } catch(e) {
+            queryRes.textContent = "Error";
+        } finally { queryBtn.textContent = "Ask"; }
+    }
+
+    // Bindings
+    generateBtn.onclick = generate;
+    queryBtn.onclick = ask;
+    
+    document.getElementById('expand-all').onclick = () => {
+        if(root) { expand(root); update(root); }
+    };
+    document.getElementById('collapse-all').onclick = () => {
+        if(root && root.children) { root.children.forEach(collapse); update(root); }
+    };
+    document.getElementById('zoom-in').onclick = () => svg.transition().call(d3.zoom().scaleBy, 1.2);
+    document.getElementById('zoom-out').onclick = () => svg.transition().call(d3.zoom().scaleBy, 0.8);
+    document.getElementById('fit').onclick = () => {
+        if(root) centerNode(root); // Simple reset to root
+    };
+});

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Mind Map</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <div class="blobs">
+        <div class="blob b1"></div>
+        <div class="blob b2"></div>
+        <div class="blob b3"></div>
+    </div>
+
+    <div class="app">
+        <aside class="sidebar">
+            <div class="header">
+                <h1>Sankalp<span>.AI</span></h1>
+            </div>
+            
+            <div class="input-group">
+                <label>Syllabus Content</label>
+                <textarea id="syllabus-input" class="glass-input" rows="8" placeholder="Paste text here..."></textarea>
+            </div>
+
+            <button id="generate-btn" class="btn btn-primary">
+                <span>Generate Map</span>
+            </button>
+
+            <!-- Node Details Panel -->
+            <div id="node-details" class="card hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <label style="margin:0">Selected Node</label>
+                    <span id="node-type" class="badge">Type</span>
+                </div>
+                <h3 id="node-label" style="font-size:1.1rem; margin-top:8px">Title</h3>
+                
+                <div style="margin-top:16px;">
+                    <label>Ask AI</label>
+                    <div style="display:flex; gap:8px;">
+                        <input id="query-input" class="glass-input" style="padding:8px;" placeholder="Ask something...">
+                        <button id="query-btn" class="btn btn-primary" style="width:auto; padding:8px 16px;">Ask</button>
+                    </div>
+                </div>
+                <div id="query-res" class="glass-input" style="margin-top:8px; min-height:60px; font-size:0.9rem; color:#ddd;"></div>
+            </div>
+        </aside>
+
+        <main class="main">
+            <div id="viz-container"></div>
+            
+            <div class="controls">
+                <button id="expand-all" class="btn btn-icon" title="Expand All">⟳</button>
+                <button id="collapse-all" class="btn btn-icon" title="Collapse All">⇊</button>
+                <button id="zoom-in" class="btn btn-icon" title="Zoom In">+</button>
+                <button id="fit" class="btn btn-icon" title="Fit to View">⤢</button>
+                <button id="zoom-out" class="btn btn-icon" title="Zoom Out">-</button>
+            </div>
+
+            <div id="loading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Synthesizing Knowledge...</p>
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
