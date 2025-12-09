@@ -66,8 +66,29 @@
                 <p>Synthesizing Knowledge...</p>
             </div>
         </main>
+
+        <aside class="right-sidebar hidden" id="note-sidebar">
+            <div class="note-header">
+                <h2>Study Notes</h2>
+                <button id="close-note-btn" class="btn-icon">×</button>
+            </div>
+            <div id="note-content" class="note-content">
+                <!-- Content will be injected here -->
+            </div>
+            <div id="note-controls">
+                <button id="generate-note-btn" class="btn btn-primary">Generate Note</button>
+            </div>
+        </aside>
     </div>
 
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        MathJax = {
+            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>

@@ -122,6 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .attr("transform", d => `translate(${source.y0 || 0},${source.x0 || 0})`)
             .on('click', click)
             .call(d3.drag()
+                .subject(function(event, d) { return {x: d.y, y: d.x}; }) // Match visual coordinates
                 .on("start", dragstarted)
                 .on("drag", dragged)
                 .on("end", dragended));
@@ -350,35 +351,117 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Note Cache
+    const nodeNotes = {}; // { nodeId: "markdown content" }
+    const noteSidebar = document.getElementById('note-sidebar');
+    const noteContent = document.getElementById('note-content');
+    const generateNoteBtn = document.getElementById('generate-note-btn');
+    const closeNoteBtn = document.getElementById('close-note-btn');
+    const noteControls = document.getElementById('note-controls');
+
+    // ... (rest of resize handler)
+
     function selectNode(d) {
         selectedData = d;
         nodeLabel.textContent = d.label;
         nodeType.textContent = d.type;
         nodeDetails.classList.remove('hidden');
         queryRes.textContent = ""; queryInput.value = "";
+        
+        // Open Note Sidebar
+        openNoteSidebar(d);
     }
-    
-    // API Query
+
+    function openNoteSidebar(d) {
+        noteSidebar.classList.remove('hidden');
+        
+        // Check Cache
+        if(nodeNotes[d.id]) {
+            renderNote(nodeNotes[d.id]);
+            noteControls.classList.add('hidden'); // Hide generate button if exists
+            // Optional: Add "Regenerate" button? For now simplest spec.
+        } else {
+            noteContent.innerHTML = "<p><em>No notes generated yet. Click below to create study notes.</em></p>";
+            noteControls.classList.remove('hidden');
+        }
+    }
+
+    function renderNote(markdown) {
+        noteContent.innerHTML = marked.parse(markdown);
+        // Re-render MathJax
+        if(window.MathJax) {
+            MathJax.typesetPromise([noteContent]);
+        }
+    }
+
+    async function generateNote() {
+        if(!selectedData) return;
+        
+        generateNoteBtn.disabled = true;
+        generateNoteBtn.textContent = "Generating Notes...";
+        noteContent.innerHTML = '<div class="spinner"></div><p>Researching topic...</p>';
+
+        try {
+            const r = await fetch('/generate_note', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({
+                    topic: selectedData.label,
+                    context: `Parent: ${selectedData.parent || 'Root'}`
+                })
+            });
+            const res = await r.json();
+            
+            if(res.note) {
+                nodeNotes[selectedData.id] = res.note;
+                renderNote(res.note);
+                noteControls.classList.add('hidden');
+            } else {
+                noteContent.innerHTML = "Error generating note.";
+            }
+
+        } catch(e) {
+            console.error(e);
+            noteContent.innerHTML = "Error connecting to AI.";
+        } finally {
+            generateNoteBtn.disabled = false;
+            generateNoteBtn.textContent = "Generate Note";
+        }
+    }
+
     async function ask() {
         if(!selectedData) return;
         const q = queryInput.value.trim();
         if(!q) return;
+        
         queryBtn.textContent = "...";
         try {
             const r = await fetch('/node_query', {
                 method:'POST', headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({node_label:selectedData.label, query:q, context:""})
+                body:JSON.stringify({
+                    node_label: selectedData.label,
+                    query: q,
+                    context: `Parent: ${selectedData.parent || 'root'}`
+                })
             });
             const d = await r.json();
-            queryRes.textContent = d.response;
+            // Render Answer with Markdown
+            const md = d.response || "No response.";
+            queryRes.innerHTML = marked.parse(md);
+            // Optional: MathJax trigger if needed, though Ask AI is usually short text
+            if(window.MathJax) MathJax.typesetPromise([queryRes]);
         } catch(e) {
-            queryRes.textContent = "Error";
-        } finally { queryBtn.textContent = "Ask"; }
+            console.error(e);
+            queryRes.textContent = "Error.";
+        } finally {
+            queryBtn.textContent = "Ask";
+        }
     }
 
     // Bindings
     generateBtn.onclick = generate;
     queryBtn.onclick = ask;
+    if(generateNoteBtn) generateNoteBtn.onclick = generateNote;
+    if(closeNoteBtn) closeNoteBtn.onclick = () => noteSidebar.classList.add('hidden');
     
     document.getElementById('expand-all').onclick = () => {
         if(root) { expand(root); update(root); }
@@ -400,17 +483,8 @@ document.addEventListener('DOMContentLoaded', () => {
             height = container.clientHeight;
             svg.attr("width", width).attr("height", height);
             
-            // Re-center on root if it exists
             if(root) {
-                 // Re-calculate root positions if needed or just center view
-                 // Since tree is static, we just need to update view center
-                 // But ideally we should re-run update() if layout depends on width/height
-                 // Our layout is fixed-size node based, so just centering is enough.
-                 // centerNode(root); // Might be jarring, maybe just let user pan?
-                 // Let's just update the root position relative to new height
                  root.x0 = height / 2;
-                 // But update() uses root.x0 for transitions... 
-                 // Let's just re-center view on root 
                  centerNode(root); 
             }
         }

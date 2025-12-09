@@ -7,7 +7,7 @@ import dataclasses
 import typing_extensions as typing
 
 # Load environment variables
-load_dotenv()
+load_dotenv(override=True)
 
 app = Flask(__name__)
 
@@ -140,6 +140,33 @@ def node_query():
     except Exception as e:
         print(f"Error querying node: {e}")
         return jsonify({"error": str(e)}), 500
+
+@app.route('/generate_note', methods=['POST'])
+def generate_note():
+    data = request.json
+    topic = data.get('topic', '')
+    context = data.get('context', '')
+    
+    prompt = f"""
+    Create a comprehensive study note for the topic: '{topic}'.
+    Context from mind map: {context}
+    
+    The note should be in Markdown format and include:
+    1.  **Overview**: A clear, concise introduction.
+    2.  **Key Concepts**: Bullet points of main ideas.
+    3.  **Detailed Explanation**: In-depth analysis.
+    4.  **Tables**: Compare/Contrast or data tables if applicable.
+    5.  **Equations/Math**: Use LaTeX formatting (e.g., $E=mc^2$) where relevant.
+    
+    Make it educational, structured, and easy to read.
+    """
+    
+    try:
+        model = genai.GenerativeModel("gemini-2.5-flash-lite") # Use flash for speed/docs
+        response = model.generate_content(prompt)
+        return jsonify({'note': response.text})
+    except Exception as e:
+        return jsonify({'note': f"Error generating note: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run("0.0.0.0",debug=True, port=5000)

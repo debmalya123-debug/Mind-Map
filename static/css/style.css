@@ -408,3 +408,81 @@ label { display: block; font-size: 0.75rem; text-transform: uppercase; color: va
         font-size: 1.25rem;
     }
 }
+
+/* Right Sidebar (Notes) */
+.right-sidebar {
+    position: fixed;
+    top: 0; right: 0;
+    width: 450px;
+    height: 100%;
+    background: rgba(0,0,0,0.8); /* Darker for reading */
+    border-left: 1px solid var(--glass-border);
+    backdrop-filter: blur(25px);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+    gap: 16px;
+    box-shadow: -5px 0 30px rgba(0,0,0,0.5);
+    transition: transform 0.3s ease-in-out;
+}
+.right-sidebar.hidden {
+    display: flex !important;
+    transform: translateX(100%); /* Slide out instead of display none */
+}
+
+.note-header {
+    display: flex; justify-content: space-between; align-items: center;
+}
+.note-content {
+    flex: 1;
+    overflow-y: auto;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    padding-right: 8px; /* For scrollbar */
+}
+
+/* Markdown Styling */
+.note-content h1, .note-content h2, .note-content h3 {
+    margin-top: 1.5em; margin-bottom: 0.5em; color: var(--accent);
+}
+.note-content ul, .note-content ol { padding-left: 20px; margin-bottom: 1em; }
+.note-content p { margin-bottom: 1em; }
+.note-content code {
+    background: rgba(255,255,255,0.1);
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-family: monospace;
+}
+.note-content pre {
+    background: rgba(0,0,0,0.3);
+    padding: 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+}
+.note-content blockquote {
+    border-left: 3px solid var(--accent);
+    padding-left: 12px;
+    margin: 1em 0;
+    color: var(--text-muted);
+}
+.note-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+}
+.note-content th, .note-content td {
+    border: 1px solid var(--glass-border);
+    padding: 8px;
+    text-align: left;
+}
+.note-content th { background: rgba(255,255,255,0.05); }
+
+/* Scrollbar styling for note content */
+.note-content::-webkit-scrollbar { width: 6px; }
+.note-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+
+/* Mobile Adjustment for Right Sidebar */
+@media (max-width: 768px) {
+    .right-sidebar { width: 100%; }
+}
