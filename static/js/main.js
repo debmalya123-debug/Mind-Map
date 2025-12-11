@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Helper: Text Width
-    function getTextWidth(text, font="13px Outfit") {
+    function getTextWidth(text, font="500 14px Inter") {
         const c = document.createElement("canvas");
         const ctx = c.getContext("2d");
         ctx.font = font;
@@ -105,9 +105,9 @@ document.addEventListener('DOMContentLoaded', () => {
             .attr('height', 1e-6)
             .attr("x", 0) 
             .attr("y", -20)
-            .attr('rx', 12)
-            .attr('ry', 12)
-            .style("fill", d => d._children ? "#a55eea" : "#45aaf2") 
+            .attr('rx', 20) /* Pill shape */
+            .attr('ry', 20)
+            .style("fill", "#18181b") 
             .style("opacity", 0);
 
         // Add Text - Centered
@@ -115,7 +115,8 @@ document.addEventListener('DOMContentLoaded', () => {
             .attr("dy", ".35em")
             .attr("text-anchor", "middle")
             .text(d => d.data.label)
-            .style("fill-opacity", 0);
+            .style("fill-opacity", 0)
+            .style("fill", d => d.data.type === 'root' ? "#000000" : "#ffffff");
 
         // UPDATE
         const nodeUpdate = nodeEnter.merge(node);
@@ -127,16 +128,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // Update the node attributes and style
         nodeUpdate.select('rect.node-rect')
             .attr('width', d => {
-                d.width = getTextWidth(d.data.label) + 24; // Store for links
+                d.width = getTextWidth(d.data.label) + 32; // Store for links + padding
                 return d.width;
             })
-            .attr('height', 36)
+            .attr('height', 40)
             .attr('x', d => -d.width / 2) 
-            .attr('y', -18) 
+            .attr('y', -20) 
             .style("fill", d => {
-                 if(d.data.type === 'root') return "#ff6b6b"; 
-                 return d._children ? "#a55eea" : "#2d98da";
+                 if(d.data.type === 'root') return "#ccff00"; // Accent
+                 return "#18181b"; // Surface
             })
+            .style("stroke", d => d.data.type === 'root' ? "none" : (d._children ? "#ccff00" : "#3f3f46"))
+            .style("stroke-width", d => d.data.type === 'root' ? 0 : (d._children ? 2 : 1))
             .style("opacity", 1)
             .attr('cursor', 'grab');
 
@@ -477,7 +480,30 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('zoom-in').onclick = () => svg.transition().call(zoom.scaleBy, 1.2);
     document.getElementById('zoom-out').onclick = () => svg.transition().call(zoom.scaleBy, 0.8);
     document.getElementById('fit').onclick = () => {
-        if(root) centerNode(root); // Simple reset to root
+        if(!root || !g) return;
+        
+        // Get the bounding box of the graph content
+        const bounds = g.node().getBBox();
+        const parent = svg.node().parentElement;
+        const fullWidth = parent.clientWidth;
+        const fullHeight = parent.clientHeight;
+        
+        // Use 0.9 factor for padding
+        const scale = 0.9 / Math.max(bounds.width / fullWidth, bounds.height / fullHeight);
+        
+        // Limit max zoom for very small graphs
+        const finalScale = Math.min(scale, 2); 
+        
+        // Calculate translation to center the bounds
+        // bounds.x/y are relative to the 'g' group, which we are transforming
+        // We need to move the center of the bounds to the center of the screen
+        const tx = fullWidth / 2 - finalScale * (bounds.x + bounds.width / 2);
+        const ty = fullHeight / 2 - finalScale * (bounds.y + bounds.height / 2);
+
+        svg.transition().duration(750).call(
+            zoom.transform, 
+            d3.zoomIdentity.translate(tx, ty).scale(finalScale)
+        );
     };
 
     // Resize Handler
