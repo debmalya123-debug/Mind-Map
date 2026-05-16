@@ -8,7 +8,7 @@ import dataclasses
 import typing
 import traceback
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -20,10 +20,22 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "fallback_secret")
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
+login_manager.login_view = 'landing'
+
+@login_manager.unauthorized_handler
+def unauthorized():
+    if request.path.startswith('/api/') or request.path == '/generate_mindmap':
+        return jsonify({"error": "Unauthorized. Please log in."}), 401
+    return app.response_class(
+        response=f'<meta http-equiv="refresh" content="0;url=/?next={request.path}">',
+        status=401,
+        mimetype='text/html'
+    )
 
 # --- Database Models ---
 class User(UserMixin, db.Model):
@@ -278,7 +290,7 @@ def signup():
     user = User(email=email, password_hash=generate_password_hash(password))
     db.session.add(user)
     db.session.commit()
-    login_user(user)
+    login_user(user, remember=True)
     return jsonify({"success": True, "email": user.email})
 
 @app.route('/api/login', methods=['POST'])
@@ -288,7 +300,7 @@ def login():
     password = data.get('password')
     user = User.query.filter_by(email=email).first()
     if user and check_password_hash(user.password_hash, password):
-        login_user(user)
+        login_user(user, remember=True)
         return jsonify({"success": True, "email": user.email})
     return jsonify({"error": "Invalid email or password"}), 401
 

@@ -186,6 +186,7 @@
             
             if(!email || !password) {
                 errorDiv.textContent = 'Please fill all fields.';
+                errorDiv.style.color = '#ef4444';
                 errorDiv.style.display = 'block';
                 return;
             }
@@ -213,6 +214,7 @@
                 
             } catch(e) {
                 errorDiv.textContent = e.message;
+                errorDiv.style.color = '#ef4444';
                 errorDiv.style.display = 'block';
             } finally {
                 submitBtn.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
@@ -238,6 +240,15 @@
                 });
             }
         });
+
+        // Auto-open modal if redirected from a protected route
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('next')) {
+            openAuthModal();
+            errorDiv.textContent = 'Please log in or sign up first to access the application.';
+            errorDiv.style.color = 'var(--accent)'; // Highlighted info color
+            errorDiv.style.display = 'block';
+        }
     </script>
 </body>
 </html>
