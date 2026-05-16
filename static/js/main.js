@@ -165,8 +165,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const nodeEnter = node.enter().append('g')
             .attr('class', 'node')
             .attr("transform", d => {
-                const o = source || root;
-                return `translate(${o.y0 || 0},${o.x0 || 0}) scale(0.001)`;
+                const p = d.parent || source || root;
+                return `translate(${p.y0 || p.y || 0},${p.x0 || p.x || 0}) scale(0.001)`;
             })
             .style("cursor", "pointer")
             .on('click', function(event, d) {
@@ -203,7 +203,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         node.exit().transition().duration(duration)
             .ease(d3.easeCubicOut)
-            .attr("transform", d => { const o = source||root; return `translate(${o.y},${o.x}) scale(0.5)`; })
+            .attr("transform", d => { 
+                const p = d.parent || source || root; 
+                return `translate(${p.y},${p.x}) scale(0.5)`; 
+            })
             .remove()
             .select('rect').style('opacity', 0);
 
@@ -211,7 +214,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const link = g.selectAll('path.link').data(links, d => d.target.id);
         const linkEnter = link.enter().insert('path', "g")
             .attr("class", "link").style("opacity", 0)
-            .attr('d', d => { const o = source||root; const p = {x:o.x0||0,y:o.y0||0,width:0}; return diagonal(p,p); });
+            .attr('d', d => { 
+                const o = d.source || source || root; 
+                const p = {x: o.x0 || o.x || 0, y: o.y0 || o.y || 0, width: 0}; 
+                return diagonal(p, p); 
+            });
 
         linkEnter.merge(link).transition().duration(duration)
             .ease(d3.easeBackOut).style("opacity", 1)
@@ -219,7 +226,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         link.exit().transition().duration(duration)
             .ease(d3.easeCubicOut).style("opacity", 0)
-            .attr('d', d => { const o = source||root; const p = {x:o.x,y:o.y,width:0}; return diagonal(p,p); })
+            .attr('d', d => { 
+                const o = d.source || source || root; 
+                const p = {x: o.x, y: o.y, width: 0}; 
+                return diagonal(p, p); 
+            })
             .remove();
 
         nodes.forEach(d => { d.x0 = d.x; d.y0 = d.y; });
@@ -498,17 +509,28 @@ document.addEventListener('DOMContentLoaded', () => {
     async function expandStepByStep() {
         if(isAnimating || !root) return;
         isAnimating = true;
-        let currentLevel = [root], hasMore = true;
-        while(hasMore) {
-            hasMore = false;
+        let currentLevel = [root];
+        
+        while(currentLevel.length > 0) {
             let nextLevel = [];
+            let expandedAny = false;
+            
             for(let n of currentLevel) {
-                if(n._children) { n.children = n._children; n._children = null; hasMore = true; }
-                if(n.children) nextLevel.push(...n.children);
+                if(n._children) { 
+                    n.children = n._children; 
+                    n._children = null; 
+                    expandedAny = true; 
+                }
+                if(n.children) {
+                    nextLevel.push(...n.children);
+                }
             }
-            if(hasMore) { update(root); await new Promise(r => setTimeout(r, duration + 100)); }
+            
+            if(expandedAny) { 
+                update(root); 
+                await new Promise(r => setTimeout(r, duration + 100)); 
+            }
             currentLevel = nextLevel;
-            if(currentLevel.length === 0) break;
         }
         isAnimating = false;
     }
@@ -516,16 +538,29 @@ document.addEventListener('DOMContentLoaded', () => {
     async function collapseStepByStep() {
         if(isAnimating || !root) return;
         isAnimating = true;
-        let hasMore = true;
-        while(hasMore) {
-            hasMore = false;
+        
+        while(true) {
             let maxDepth = -1;
             const visible = root.descendants();
             visible.forEach(n => { if(n.children && n.depth > maxDepth) maxDepth = n.depth; });
-            if(maxDepth >= 0) {
-                visible.forEach(n => { if(n.children && n.depth === maxDepth) { n._children = n.children; n.children = null; hasMore = true; } });
+            
+            if(maxDepth < 0) break; // Completely collapse all the way to root
+            
+            let collapsedAny = false;
+            visible.forEach(n => { 
+                if(n.children && n.depth === maxDepth) { 
+                    n._children = n.children; 
+                    n.children = null; 
+                    collapsedAny = true; 
+                } 
+            });
+            
+            if(collapsedAny) { 
+                update(root); 
+                await new Promise(r => setTimeout(r, duration + 100)); 
+            } else {
+                break;
             }
-            if(hasMore) { update(root); await new Promise(r => setTimeout(r, duration + 100)); }
         }
         isAnimating = false;
     }
@@ -548,13 +583,15 @@ document.addEventListener('DOMContentLoaded', () => {
         rootNode.y0 = 0;
         tree = d3.tree().nodeSize([80, 400]);
         root = rootNode;
-        if(root.children) root.children.forEach(collapse);
+        
+        // Collapse everything down to the root initially
+        collapse(root);
         update(root);
         
-        // Trigger expand animation on initial load
+        // Trigger expand animation on initial load after initial render settles
         setTimeout(() => {
             expandStepByStep();
-        }, 300);
+        }, 800);
     }
 
     // ==============================================

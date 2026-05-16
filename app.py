@@ -336,6 +336,15 @@ def get_mindmaps():
     res = [{"id": m.id, "title": m.title, "created_at": m.created_at.isoformat()} for m in maps]
     return jsonify(res)
 
+@app.route('/api/delete_mindmap/<mindmap_id>', methods=['DELETE'])
+@login_required
+def delete_mindmap(mindmap_id):
+    mm = Mindmap.query.filter_by(id=mindmap_id, user_id=current_user.id).first()
+    if not mm: return jsonify({"error": "Not found or unauthorized"}), 404
+    db.session.delete(mm)
+    db.session.commit()
+    return jsonify({"success": True})
+
 @app.route('/api/load_mindmap/<mindmap_id>', methods=['GET'])
 @login_required
 def load_mindmap(mindmap_id):

@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
 </head>
 <body>
+    <div class="ambient-bg"></div>
+
     <header class="dash-header">
         <a href="/" class="logo">MindMap<span>.AI</span></a>
         <div class="user-actions">
@@ -15,13 +17,15 @@
     </header>
 
     <main class="dash-main">
-        <h1 class="section-title">Your Mindmaps</h1>
+        <div class="library-header">
+            <h1 class="section-title">Your Mindmaps</h1>
+        </div>
         
         <div class="grid" id="mindmap-grid">
             <!-- Create New Card -->
             <div class="card create-card" onclick="openCreateModal()">
                 <div class="create-icon">+</div>
-                <div>Create new mindmap</div>
+                <div style="font-weight: 500;">Create new mindmap</div>
             </div>
             
             <!-- Existing maps will be injected here via JS -->
@@ -42,7 +46,6 @@
     </div>
 
     <script>
-        // Load Maps on init
         document.addEventListener('DOMContentLoaded', loadMaps);
 
         async function loadMaps() {
@@ -61,24 +64,71 @@
                 }
                 const maps = await res.json();
                 
-                maps.forEach(m => {
+                maps.forEach((m, index) => {
                     const card = document.createElement('a');
                     card.href = `/app/${m.id}`;
                     card.className = 'card';
+                    card.style.animationDelay = `${0.05 * index}s`;
                     
                     const dateObj = new Date(m.created_at);
                     const dateStr = dateObj.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
                     
                     card.innerHTML = `
-                        <div class="card-title">${m.title}</div>
-                        <div class="card-meta">
-                            <span>${dateStr}</span>
+                        <div class="card-menu" onclick="event.preventDefault(); event.stopPropagation(); toggleMenu(this)">
+                            <button class="card-menu-btn">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                            </button>
+                            <div class="card-menu-dropdown">
+                                <button class="menu-item delete" onclick="deleteMindmap('${m.id}', event)">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-content">
+                            <div class="card-title">${m.title}</div>
+                            <div class="card-meta">
+                                <span>${dateStr}</span>
+                            </div>
                         </div>
                     `;
                     grid.appendChild(card);
                 });
             } catch(e) {
                 console.error("Error loading maps", e);
+            }
+        }
+
+        // Handle clicking outside to close menus
+        document.addEventListener('click', function(e) {
+            if(!e.target.closest('.card-menu')) {
+                document.querySelectorAll('.card-menu-dropdown').forEach(d => d.classList.remove('active'));
+            }
+        });
+
+        function toggleMenu(menuContainer) {
+            // Close others
+            document.querySelectorAll('.card-menu-dropdown').forEach(d => {
+                if(d !== menuContainer.querySelector('.card-menu-dropdown')) {
+                    d.classList.remove('active');
+                }
+            });
+            const dropdown = menuContainer.querySelector('.card-menu-dropdown');
+            dropdown.classList.toggle('active');
+        }
+
+        async function deleteMindmap(id, event) {
+            event.preventDefault();
+            event.stopPropagation();
+            
+            if(!confirm("Are you sure you want to delete this mindmap? This cannot be undone.")) return;
+            
+            try {
+                const res = await fetch(`/api/delete_mindmap/${id}`, { method: 'DELETE' });
+                if(!res.ok) throw new Error("Failed to delete");
+                loadMaps(); // Reload the grid
+            } catch(e) {
+                alert("Error deleting mindmap: " + e.message);
             }
         }
 
