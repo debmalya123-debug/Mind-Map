@@ -1,23 +1,75 @@
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("Mind Map App: main.js loaded successfully (v2)");
-    // Elements
-    const syllabusInput = document.getElementById('syllabus-input');
-    const generateBtn = document.getElementById('generate-btn');
+    console.log("Mind Map App: main.js v12");
+
+    // --- DOM Elements ---
     const loading = document.getElementById('loading');
-    const nodeDetails = document.getElementById('node-details');
+    const notesCard = document.getElementById('notes-card');
     const nodeLabel = document.getElementById('node-label');
     const nodeType = document.getElementById('node-type');
-    const queryInput = document.getElementById('query-input');
-    const queryBtn = document.getElementById('query-btn');
-    const queryRes = document.getElementById('query-res');
+    const noteContent = document.getElementById('note-content');
+    const generateNoteBtn = document.getElementById('generate-note-btn');
+    const closeNotesBtn = document.getElementById('close-notes-btn');
 
-    // D3 Variables
-    let svg, g, tree, root, zoom; // Added zoom
+    // Chat Widget
+    const chatWidget = document.getElementById('ai-chat-widget');
+    const chatToggle = document.getElementById('chat-toggle');
+    const chatPanel = document.getElementById('chat-panel');
+    const chatMessages = document.getElementById('chat-messages');
+    const chatInput = document.getElementById('query-input');
+    const chatSendBtn = document.getElementById('query-btn');
+    const chatNodeName = document.getElementById('chat-node-name');
+    const indicatorDot = document.querySelector('.indicator-dot');
+
+    // --- D3 Variables ---
+    let svg, g, tree, root, zoom;
     let width, height;
     let selectedData = null;
     let i = 0;
-    const duration = 750;
+    const duration = 600;
 
+    // --- App State ---
+    let isLoggedIn = false;
+    let currentMindmapId = null;
+    const nodeNotes = {};
+    const chatCache = {}; // { client_id: [{role, content}] }
+    let currentChatNodeId = null;
+
+    // --- Auth ---
+    async function checkAuth() {
+        try {
+            const res = await fetch('/api/user');
+            const data = await res.json();
+            isLoggedIn = !!data.email;
+        } catch(e) { console.error(e); }
+    }
+
+    // --- Load Mindmap ---
+    async function loadMindmap(id) {
+        loading.classList.remove('hidden');
+        try {
+            const r = await fetch(`/api/load_mindmap/${id}`);
+            if(!r.ok) throw new Error("API Error");
+            const d = await r.json();
+            currentMindmapId = id;
+            initD3();
+            processData(d);
+        } catch(e) {
+            console.error(e);
+            alert("Error loading mindmap");
+        } finally {
+            loading.classList.add('hidden');
+        }
+    }
+
+    checkAuth().then(() => {
+        if(window.INITIAL_MINDMAP_ID) {
+            loadMindmap(window.INITIAL_MINDMAP_ID);
+        }
+    });
+
+    // ==============================================
+    // D3 SETUP
+    // ==============================================
     function initD3() {
         const container = document.getElementById('viz-container');
         width = container.clientWidth;
@@ -25,10 +77,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         d3.select("#viz-container").selectAll("*").remove();
 
-        // Initialize Zoom Behavior
-        zoom = d3.zoom().scaleExtent([0.1, 4]).on("zoom", (e) => {
-            g.attr("transform", e.transform);
-        });
+        zoom = d3.zoom()
+            .scaleExtent([0.2, 2.5])
+            .on("zoom", (event) => g.attr("transform", event.transform));
 
         svg = d3.select("#viz-container")
             .append("svg")
@@ -37,12 +88,9 @@ document.addEventListener('DOMContentLoaded', () => {
             .call(zoom)
             .on("dblclick.zoom", null);
 
-        g = svg.append("g")
-            .attr("transform", `translate(${100},${height/2})`); 
-            // Initial translation to the left-center
+        g = svg.append("g");
     }
 
-    // Helper: Text Width
     function getTextWidth(text, font="500 14px Inter") {
         const c = document.createElement("canvas");
         const ctx = c.getContext("2d");
@@ -50,474 +98,483 @@ document.addEventListener('DOMContentLoaded', () => {
         return ctx.measureText(text).width;
     }
 
-    // Creates a simple straight line path from parent RIGHT to child LEFT
     function diagonal(s, d) {
-        // Source X (Horizontal): y position + half width (Right Edge)
         const sWidth = s.width || 0;
         const dWidth = d.width || 0;
-
         const sx = s.y + sWidth / 2;
         const sy = s.x;
-        
-        // Target X (Horizontal): y position - half width (Left Edge)
         const tx = d.y - dWidth / 2;
         const ty = d.x;
-
-        // Simple Straight Line
-        return `M ${sx} ${sy} L ${tx} ${ty}`;
+        const midX = (sx + tx) / 2;
+        return `M ${sx},${sy} C ${midX},${sy} ${midX},${ty} ${tx},${ty}`;
     }
 
-    // --- Update Pattern ---
-    function update(source) {
-        // Assigns the x and y position for the nodes
-        const treeData = tree(root);
+    // ==============================================
+    // FIT TO VIEW (Target-based Bounds)
+    // ==============================================
+    function fitToView(animated = true) {
+        if(!root || !svg || !zoom) return;
+        const container = document.getElementById('viz-container');
+        const fullWidth = container.clientWidth;
+        const fullHeight = container.clientHeight;
+        svg.attr("width", fullWidth).attr("height", fullHeight);
 
-        // Compute the new tree layout.
+        // Calculate exact bounds mathematically based on visible nodes
+        const nodes = tree(root).descendants();
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        
+        nodes.forEach(d => {
+            const w = d.width || (getTextWidth(d.data.label) + 32);
+            // x/y are swapped in D3 tree (d.y is horizontal, d.x is vertical)
+            if (d.y - w/2 < minX) minX = d.y - w/2;
+            if (d.y + w/2 > maxX) maxX = d.y + w/2;
+            if (d.x - 20 < minY) minY = d.x - 20;
+            if (d.x + 20 > maxY) maxY = d.x + 20;
+        });
+
+        if (minX === Infinity) return;
+
+        const bounds = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+        const padding = 80;
+        const scaleX = (fullWidth - padding * 2) / bounds.width;
+        const scaleY = (fullHeight - padding * 2) / bounds.height;
+        const scale = Math.min(scaleX, scaleY, 1.5);
+
+        const tx = fullWidth / 2 - scale * (bounds.x + bounds.width / 2);
+        const ty = fullHeight / 2 - scale * (bounds.y + bounds.height / 2);
+        const newTransform = d3.zoomIdentity.translate(tx, ty).scale(scale);
+
+        if(animated) {
+            svg.transition().duration(duration).call(zoom.transform, newTransform);
+        } else {
+            svg.call(zoom.transform, newTransform);
+        }
+    }
+
+    // ==============================================
+    // UPDATE TREE
+    // ==============================================
+    function update(source) {
+        const treeData = tree(root);
         const nodes = treeData.descendants();
         const links = treeData.links();
 
-        // ** Dynamic Horizontal Spacing Logic REMOVED **
-        // Retaining standard D3 Tree structure for cleanliness and reliability.
-        // d.y (horizontal) is automatically determined by source.y + nodeSize width.
-        // d.x (vertical) is determined by nodeSize height.
-
-        // ****************** Nodes Section ******************
-
-        // Update the nodes...
         const node = g.selectAll('g.node')
             .data(nodes, d => d.id || (d.id = ++i));
 
-        // Enter any new modes at the parent's previous position.
         const nodeEnter = node.enter().append('g')
             .attr('class', 'node')
-            .attr("transform", d => `translate(${source.y0 || 0},${source.x0 || 0})`)
-            .on('click', click)
-            .call(d3.drag()
-                .subject(function(event, d) { return {x: d.y, y: d.x}; }) // Match visual coordinates
-                .on("start", dragstarted)
-                .on("drag", dragged)
-                .on("end", dragended));
+            .attr("transform", d => {
+                const o = source || root;
+                return `translate(${o.y0 || 0},${o.x0 || 0}) scale(0.001)`;
+            })
+            .style("cursor", "pointer")
+            .on('click', function(event, d) {
+                event.stopPropagation();
+                handleNodeClick(d);
+            });
 
-        // Add Rectangles
         nodeEnter.append('rect')
             .attr('class', 'node-rect')
-            .attr('width', 1e-6)
-            .attr('height', 1e-6)
-            .attr("x", 0) 
-            .attr("y", -20)
-            .attr('rx', 20) /* Pill shape */
-            .attr('ry', 20)
-            .style("fill", "#18181b") 
-            .style("opacity", 0);
+            .attr('height', 40).attr('rx', 20).attr('ry', 20)
+            .style("fill", "#18181b").style("opacity", 0);
 
-        // Add Text - Centered
         nodeEnter.append('text')
-            .attr("dy", ".35em")
-            .attr("text-anchor", "middle")
+            .attr("dy", ".35em").attr("text-anchor", "middle")
             .text(d => d.data.label)
             .style("fill-opacity", 0)
-            .style("fill", d => d.data.type === 'root' ? "#000000" : "#ffffff");
+            .style("fill", d => d.data.type === 'root' ? "#000" : "#fff");
 
-        // UPDATE
         const nodeUpdate = nodeEnter.merge(node);
-
-        // Transition to the proper position for the node
         nodeUpdate.transition().duration(duration)
-            .attr("transform", d => `translate(${d.y},${d.x})`);
+            .ease(d3.easeBackOut)
+            .attr("transform", d => `translate(${d.y},${d.x}) scale(1)`);
 
-        // Update the node attributes and style
         nodeUpdate.select('rect.node-rect')
-            .attr('width', d => {
-                d.width = getTextWidth(d.data.label) + 32; // Store for links + padding
-                return d.width;
-            })
+            .attr('width', d => { d.width = getTextWidth(d.data.label) + 32; return d.width; })
             .attr('height', 40)
-            .attr('x', d => -d.width / 2) 
-            .attr('y', -20) 
-            .style("fill", d => {
-                 if(d.data.type === 'root') return "#ccff00"; // Accent
-                 return "#18181b"; // Surface
-            })
+            .attr('x', d => -d.width / 2).attr('y', -20)
+            .style("fill", d => d.data.type === 'root' ? "#ccff00" : "#18181b")
             .style("stroke", d => d.data.type === 'root' ? "none" : (d._children ? "#ccff00" : "#3f3f46"))
             .style("stroke-width", d => d.data.type === 'root' ? 0 : (d._children ? 2 : 1))
-            .style("opacity", 1)
-            .attr('cursor', 'grab');
+            .style("opacity", 1);
 
-        nodeUpdate.select('text')
-            .style("fill-opacity", 1);
+        nodeUpdate.select('text').style("fill-opacity", 1);
 
-        // Remove any exiting nodes
-        const nodeExit = node.exit().transition().duration(duration)
-            .attr("transform", d => `translate(${source.y},${source.x})`)
-            .remove();
+        node.exit().transition().duration(duration)
+            .ease(d3.easeCubicOut)
+            .attr("transform", d => { const o = source||root; return `translate(${o.y},${o.x}) scale(0.5)`; })
+            .remove()
+            .select('rect').style('opacity', 0);
 
-        nodeExit.select('rect')
-            .attr('width', 1e-6)
-            .attr('height', 1e-6);
-
-        nodeExit.select('text')
-            .style("fill-opacity", 1e-6);
-
-        // ****************** Links Section ******************
-
-        // Update the links...
-        const link = g.selectAll('path.link')
-            .data(links, d => d.target.id);
-
-        // Enter any new links at the parent's previous position.
+        // Links
+        const link = g.selectAll('path.link').data(links, d => d.target.id);
         const linkEnter = link.enter().insert('path', "g")
-            .attr("class", "link")
-            .attr('d', d => {
-                const o = {x: source.x0 || 0, y: source.y0 || 0, width: 0};
-                return diagonal(o, o);
-            });
+            .attr("class", "link").style("opacity", 0)
+            .attr('d', d => { const o = source||root; const p = {x:o.x0||0,y:o.y0||0,width:0}; return diagonal(p,p); });
 
-        // UPDATE
-        const linkUpdate = linkEnter.merge(link);
-
-        // Transition back to the parent element position
-        linkUpdate.transition().duration(duration)
+        linkEnter.merge(link).transition().duration(duration)
+            .ease(d3.easeBackOut).style("opacity", 1)
             .attr('d', d => diagonal(d.source, d.target));
 
-        // Remove any exiting links
-        const linkExit = link.exit().transition().duration(duration)
-            .attr('d', d => {
-                const o = {x: source.x, y: source.y, width: 0}; 
-                return diagonal(o, o);
-            })
+        link.exit().transition().duration(duration)
+            .ease(d3.easeCubicOut).style("opacity", 0)
+            .attr('d', d => { const o = source||root; const p = {x:o.x,y:o.y,width:0}; return diagonal(p,p); })
             .remove();
 
-        // Store the old positions for transition.
-        nodes.forEach(d => {
-            d.x0 = d.x;
-            d.y0 = d.y;
-        });
-    }
-
-    // Drag Functions
-    function dragstarted(event, d) {
-        d3.select(this).raise().attr("cursor", "grabbing");
-    }
-
-    function dragged(event, d) {
-        d.x = event.y;
-        d.y = event.x;
-        // Update Node Position immediately
-        d3.select(this).attr("transform", `translate(${d.y},${d.x})`);
+        nodes.forEach(d => { d.x0 = d.x; d.y0 = d.y; });
         
-        // Update Links connected to this node
-        // We need to re-select links and update their 'd' attribute
-        g.selectAll('path.link').attr('d', l => diagonal(l.source, l.target));
+        // Sync camera transition with node transition for a perfectly smooth effect
+        fitToView(true);
     }
 
-    function dragended(event, d) {
-        d3.select(this).attr("cursor", "grab");
-    }
-
-    // Toggle children on click.
-    function click(event, d) {
-        if (d.children) {
-            d._children = d.children;
-            d.children = null;
-        } else {
-            d.children = d._children;
-            d._children = null;
-        }
+    // ==============================================
+    // CLICK HANDLER
+    // ==============================================
+    function handleNodeClick(d) {
+        console.log('NODE CLICKED:', d.data.label);
+        if (d.children) { d._children = d.children; d.children = null; }
+        else if (d._children) { d.children = d._children; d._children = null; }
         update(d);
-        
-        // Also update selection panel
-        selectNode(d); // Pass D3 Node, not just data
-        event.stopPropagation();
-    }
 
-    // Collapse All
-    function collapse(d) {
-        if(d.children) {
-            d._children = d.children;
-            d._children.forEach(collapse);
-            d.children = null;
-        }
-    }
-
-    // Expand All
-    function expand(d) {
-        if(d._children) {
-            d.children = d._children;
-            d._children = null;
-        }
-        if(d.children) d.children.forEach(expand);
-    }
-
-    function processData(data) {
-        // Convert flat List to Hierarchy
-        // Strategy: Link via ID/Parent, then d3.stratify
-        
-        // Ensure Root
-        if(!data.nodes.find(n => n.id === 'root')) {
-            data.nodes.push({id:'root', label: data.title, type:'root'});
-        }
-        
-        // Validate Parents
-        const ids = new Set(data.nodes.map(n => n.id));
-        data.nodes.forEach(n => {
-            if(n.id !== 'root') {
-                 if(!n.parent || n.parent === 'title' || !ids.has(n.parent)) {
-                     n.parent = 'root';
-                 }
-            } else {
-                n.parent = ""; // Root has no parent (stratify requirement)
-            }
-        });
-
-        // Stratify
-        const rootNode = d3.stratify()
-            .id(d => d.id)
-            .parentId(d => d.parent)
-            (data.nodes);
-
-        rootNode.x0 = height / 2;
-        rootNode.y0 = 0;
-
-        // Tree Layout Size
-        // Increased node separation for better readability
-        // nodeSize is [height, width] for horizontal trees if standard,
-        // but for d3.tree, it's [y, x] in logical coords? 
-        // Actually d3.tree().nodeSize([h, w]) sets the spacing.
-        // We utilize dynamic horizontal (y), so the second value matters less for logic,
-        // but the first value (height) determines vertical separation.
-        // nodeSize is [height, width] for standard tree (x=vertical, y=horizontal in our transform)
-        tree = d3.tree().nodeSize([80, 400]); 
-
-        root = rootNode;
-        
-        // Start Collapsed
-        if(root.children) {
-            root.children.forEach(collapse);
-        }
-
-        update(root);
-        
-        // Initial Center
-        centerNode(root);
-    }
-    
-    function centerNode(source) {
-        // Center the view on the node
-        const t = d3.zoomTransform(svg.node());
-        const scale = t.k;
-        const x = -source.y0 * scale + 150; // Shift right a bit
-        const y = -source.x0 * scale + height / 2;
-        
-        svg.transition().duration(750).call(d3.zoom().transform, d3.zoomIdentity.translate(x, y).scale(scale));
-    }
-
-    async function generate() {
-        console.log("Generate button clicked");
-        const text = syllabusInput.value.trim();
-        if(!text) return alert("Text required.");
-        
-        loading.classList.remove('hidden');
-        try {
-            const r = await fetch('/generate_mindmap', {
-                method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({syllabus:text})
-            });
-            if(!r.ok) throw new Error("API Error");
-            const d = await r.json();
-            initD3();
-            processData(d);
-        } catch(e) {
-            console.error(e);
-            alert("Error");
-        } finally {
-            loading.classList.add('hidden');
-        }
-    }
-
-    // Note Cache
-    const nodeNotes = {}; // { nodeId: "markdown content" }
-    const noteSidebar = document.getElementById('note-sidebar');
-    const noteContent = document.getElementById('note-content');
-    const generateNoteBtn = document.getElementById('generate-note-btn');
-    const closeNoteBtn = document.getElementById('close-note-btn');
-    const noteControls = document.getElementById('note-controls');
-
-    function selectNode(d) {
-        selectedData = d; // Now storing D3 Node
+        selectedData = d;
         const data = d.data;
         nodeLabel.textContent = data.label;
         nodeType.textContent = data.type;
-        nodeDetails.classList.remove('hidden');
-        queryRes.textContent = ""; queryInput.value = "";
-        
-        openNoteSidebar(data); // Note sidebar uses ID
+        openNotesCard(data);
+        updateChatForNode(data);
     }
 
-    function openNoteSidebar(data) {
-        noteSidebar.classList.remove('hidden');
+    // ==============================================
+    // NOTES CARD
+    // ==============================================
+    async function openNotesCard(data) {
+        notesCard.classList.remove('hidden-card');
+
         if(nodeNotes[data.id]) {
             renderNote(nodeNotes[data.id]);
-            noteControls.classList.add('hidden');
+            generateNoteBtn.style.display = 'none';
+        } else if (isLoggedIn && currentMindmapId) {
+            noteContent.innerHTML = "<div class='spinner' style='width:24px;height:24px;margin:40px auto;'></div>";
+            generateNoteBtn.style.display = 'none';
+            try {
+                const res = await fetch('/api/get_note', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ mindmap_id: currentMindmapId, client_id: data.id })
+                });
+                const noteData = await res.json();
+                if(noteData.note) {
+                    nodeNotes[data.id] = noteData.note;
+                    renderNote(noteData.note);
+                    generateNoteBtn.style.display = 'none';
+                } else { showNotesEmpty(); generateNoteBtn.style.display = ''; }
+            } catch(e) { showNotesEmpty(); generateNoteBtn.style.display = ''; }
         } else {
-            noteContent.innerHTML = "<p><em>No notes generated yet...</em></p>";
-            noteControls.classList.remove('hidden');
+            showNotesEmpty();
+            generateNoteBtn.style.display = '';
         }
     }
 
-    // ... (renderNote) ...
+    function showNotesEmpty() {
+        noteContent.innerHTML = `
+            <div class="notes-empty">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                <p>Click <strong>"Generate"</strong> to create<br>detailed study notes for this topic.</p>
+            </div>`;
+    }
 
     function renderNote(markdown) {
         noteContent.innerHTML = marked.parse(markdown);
-        // Re-render MathJax
-        if(window.MathJax) {
-            MathJax.typesetPromise([noteContent]);
-        }
+        if(window.MathJax) MathJax.typesetPromise([noteContent]);
     }
 
     async function generateNote() {
         if(!selectedData) return;
         const d = selectedData;
         const data = d.data;
-
-        // Construct Context
         const parentLabel = d.parent ? d.parent.data.label : "None";
-        // Root is the last ancestor
         const rootLabel = d.ancestors ? d.ancestors().pop().data.label : "Root";
-        
+
         generateNoteBtn.disabled = true;
-        generateNoteBtn.textContent = "Generating Notes...";
-        noteContent.innerHTML = '<div class="spinner"></div><p>Researching topic...</p>';
+        generateNoteBtn.innerHTML = `<div class="spinner" style="width:16px;height:16px;margin:0;border-width:2px;"></div> Generating...`;
+        noteContent.innerHTML = `<div class="notes-empty"><div class="spinner"></div><p>AI is researching this topic...</p></div>`;
 
         try {
             const r = await fetch('/generate_note', {
                 method:'POST', headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({
-                    topic: data.label,
-                    context: `Parent Topic: ${parentLabel}. Main Subject: ${rootLabel}.`
-                })
+                body:JSON.stringify({ topic: data.label, context: `Parent: ${parentLabel}. Subject: ${rootLabel}.` })
             });
-            
-            // Handle non-JSON responses (CRITICAL FIX)
             const text = await r.text();
             let res;
-            try {
-                res = JSON.parse(text);
-            } catch(jsonErr) {
-                console.error("Server returned non-JSON:", text);
-                throw new Error(`Server Error: ${text.substring(0, 100)}...`);
-            }
-            
+            try { res = JSON.parse(text); } catch(e) { throw new Error("Server Error"); }
+
             if(res.note) {
                 nodeNotes[data.id] = res.note;
                 renderNote(res.note);
-                noteControls.classList.add('hidden');
+                generateNoteBtn.style.display = 'none';
+                if(isLoggedIn && currentMindmapId) {
+                    fetch('/api/save_note', { method:'POST', headers:{'Content-Type':'application/json'},
+                        body: JSON.stringify({ mindmap_id: currentMindmapId, client_id: data.id, content: res.note })
+                    });
+                }
             } else {
-                noteContent.innerHTML = "Error generating note.";
+                noteContent.innerHTML = '<div class="notes-empty"><p>Error generating notes.</p></div>';
             }
-
         } catch(e) {
             console.error(e);
-            noteContent.innerHTML = `Error: ${e.message || "Connecting to AI"}`;
+            noteContent.innerHTML = `<div class="notes-empty"><p>Error: ${e.message}</p></div>`;
         } finally {
             generateNoteBtn.disabled = false;
-            generateNoteBtn.textContent = "Generate Note";
+            generateNoteBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg> Generate Study Notes`;
         }
     }
 
-    async function ask() {
-        if(!selectedData) return;
-        const d = selectedData;
-        const data = d.data; // D3 Node -> Data
-        const q = queryInput.value.trim();
+    // ==============================================
+    // AI CHAT with DB Persistence
+    // ==============================================
+    let chatOpen = false;
+
+    function toggleChat() {
+        chatOpen = !chatOpen;
+        chatWidget.classList.toggle('open', chatOpen);
+        chatPanel.classList.toggle('hidden-chat', !chatOpen);
+        if(chatOpen && selectedData) {
+            chatInput.disabled = false;
+            chatSendBtn.disabled = false;
+        }
+    }
+
+    // When a node is clicked, update chat context
+    async function updateChatForNode(data) {
+        currentChatNodeId = data.id;
+        chatNodeName.textContent = data.label;
+        indicatorDot.classList.add('active');
+        chatInput.disabled = false;
+        chatSendBtn.disabled = false;
+        chatInput.placeholder = `Ask about "${data.label}"...`;
+
+        // Load chat history from cache or DB
+        if(chatCache[data.id]) {
+            renderChatHistory(chatCache[data.id]);
+        } else if(isLoggedIn && currentMindmapId) {
+            // Load from DB
+            try {
+                const res = await fetch('/api/get_chat', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ mindmap_id: currentMindmapId, client_id: data.id })
+                });
+                const chatData = await res.json();
+                if(chatData.messages && chatData.messages.length > 0) {
+                    chatCache[data.id] = chatData.messages;
+                    renderChatHistory(chatData.messages);
+                } else {
+                    chatCache[data.id] = [];
+                    showChatWelcome();
+                }
+            } catch(e) {
+                chatCache[data.id] = [];
+                showChatWelcome();
+            }
+        } else {
+            if(!chatCache[data.id]) chatCache[data.id] = [];
+            renderChatHistory(chatCache[data.id]);
+        }
+    }
+
+    function renderChatHistory(messages) {
+        chatMessages.innerHTML = '';
+        if(messages.length === 0) {
+            showChatWelcome();
+            return;
+        }
+        messages.forEach(msg => {
+            const el = document.createElement('div');
+            el.className = `chat-msg ${msg.role}`;
+            if(msg.role === 'ai') {
+                el.innerHTML = marked.parse(msg.content);
+            } else {
+                el.textContent = msg.content;
+            }
+            chatMessages.appendChild(el);
+        });
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function showChatWelcome() {
+        chatMessages.innerHTML = `<div class="chat-welcome"><p>👋 Ask me anything about <strong>${chatNodeName.textContent}</strong>. Your conversation is saved.</p></div>`;
+    }
+
+    async function sendChatMessage() {
+        if(!selectedData || !currentChatNodeId) return;
+        const q = chatInput.value.trim();
         if(!q) return;
 
+        const d = selectedData;
+        const data = d.data;
         const parentLabel = d.parent ? d.parent.data.label : "None";
         const rootLabel = d.ancestors ? d.ancestors().pop().data.label : "Root";
-        
-        queryBtn.textContent = "...";
+
+        // Remove welcome if present
+        const welcome = chatMessages.querySelector('.chat-welcome');
+        if(welcome) welcome.remove();
+
+        // Add user bubble
+        addChatBubble(q, 'user');
+        if(!chatCache[data.id]) chatCache[data.id] = [];
+        chatCache[data.id].push({ role: 'user', content: q });
+
+        chatInput.value = '';
+        chatSendBtn.disabled = true;
+
+        // Save user message to DB
+        if(isLoggedIn && currentMindmapId) {
+            fetch('/api/save_chat', { method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ mindmap_id: currentMindmapId, client_id: data.id, role: 'user', content: q })
+            });
+        }
+
+        // Show thinking
+        const thinkingEl = document.createElement('div');
+        thinkingEl.className = 'chat-msg ai';
+        thinkingEl.innerHTML = '<div class="spinner" style="width:16px;height:16px;margin:0;border-width:2px;"></div>';
+        chatMessages.appendChild(thinkingEl);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+
         try {
             const r = await fetch('/node_query', {
                 method:'POST', headers:{'Content-Type':'application/json'},
                 body:JSON.stringify({
-                    node_label: data.label,
-                    query: q,
-                    context: `Parent Topic: ${parentLabel}. Main Subject: ${rootLabel}.`
+                    node_label: data.label, query: q,
+                    context: `Parent: ${parentLabel}. Subject: ${rootLabel}.`
                 })
             });
             const res = await r.json();
-            // Render Answer with Markdown
-            const md = res.response || "No response.";
-            queryRes.innerHTML = marked.parse(md);
-            if(window.MathJax) MathJax.typesetPromise([queryRes]);
+            const md = res.response || "Sorry, I couldn't generate a response.";
+            thinkingEl.remove();
+            addChatBubble(md, 'ai');
+            chatCache[data.id].push({ role: 'ai', content: md });
+
+            // Save AI response to DB
+            if(isLoggedIn && currentMindmapId) {
+                fetch('/api/save_chat', { method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({ mindmap_id: currentMindmapId, client_id: data.id, role: 'ai', content: md })
+                });
+            }
         } catch(e) {
             console.error(e);
-            queryRes.textContent = "Error.";
+            thinkingEl.remove();
+            addChatBubble("Error connecting to AI.", 'ai');
         } finally {
-            queryBtn.textContent = "Ask";
+            chatSendBtn.disabled = false;
+            chatInput.focus();
         }
     }
 
-    // Bindings
-    generateBtn.onclick = generate;
-    queryBtn.onclick = ask;
-    if(generateNoteBtn) generateNoteBtn.onclick = generateNote;
-    if(closeNoteBtn) closeNoteBtn.onclick = () => noteSidebar.classList.add('hidden');
-    
-    
-    document.getElementById('expand-all').onclick = () => {
-        if(root) { 
-            expand(root); 
-            update(root); 
-            centerNode(root);
+    function addChatBubble(content, role) {
+        const msg = document.createElement('div');
+        msg.className = `chat-msg ${role}`;
+        if(role === 'ai') {
+            msg.innerHTML = marked.parse(content);
+            if(window.MathJax) MathJax.typesetPromise([msg]);
+        } else {
+            msg.textContent = content;
         }
-    };
-    document.getElementById('collapse-all').onclick = () => {
-        if(root) { 
-            collapse(root); // Collapse ROOT to show only single node
-            update(root); 
-            centerNode(root);
-        }
-    };
-    document.getElementById('zoom-in').onclick = () => svg.transition().call(zoom.scaleBy, 1.2);
-    document.getElementById('zoom-out').onclick = () => svg.transition().call(zoom.scaleBy, 0.8);
-    document.getElementById('fit').onclick = () => {
-        if(!root || !g) return;
-        
-        // Get the bounding box of the graph content
-        const bounds = g.node().getBBox();
-        const parent = svg.node().parentElement;
-        const fullWidth = parent.clientWidth;
-        const fullHeight = parent.clientHeight;
-        
-        // Use 0.9 factor for padding
-        const scale = 0.9 / Math.max(bounds.width / fullWidth, bounds.height / fullHeight);
-        
-        // Limit max zoom for very small graphs
-        const finalScale = Math.min(scale, 2); 
-        
-        // Calculate translation to center the bounds
-        // bounds.x/y are relative to the 'g' group, which we are transforming
-        // We need to move the center of the bounds to the center of the screen
-        const tx = fullWidth / 2 - finalScale * (bounds.x + bounds.width / 2);
-        const ty = fullHeight / 2 - finalScale * (bounds.y + bounds.height / 2);
+        chatMessages.appendChild(msg);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
 
-        svg.transition().duration(750).call(
-            zoom.transform, 
-            d3.zoomIdentity.translate(tx, ty).scale(finalScale)
-        );
-    };
+    // ==============================================
+    // COLLAPSE / EXPAND
+    // ==============================================
+    function collapse(d) {
+        if(d.children) { d._children = d.children; d._children.forEach(collapse); d.children = null; }
+    }
+    function expand(d) {
+        if(d._children) { d.children = d._children; d._children = null; }
+        if(d.children) d.children.forEach(expand);
+    }
 
-    // Resize Handler
-    window.addEventListener('resize', () => {
-        const container = document.getElementById('viz-container');
-        if(svg && container) {
-            width = container.clientWidth;
-            height = container.clientHeight;
-            svg.attr("width", width).attr("height", height);
-            
-            if(root) {
-                 root.x0 = height / 2;
-                 centerNode(root); 
+    let isAnimating = false;
+    async function expandStepByStep() {
+        if(isAnimating || !root) return;
+        isAnimating = true;
+        let currentLevel = [root], hasMore = true;
+        while(hasMore) {
+            hasMore = false;
+            let nextLevel = [];
+            for(let n of currentLevel) {
+                if(n._children) { n.children = n._children; n._children = null; hasMore = true; }
+                if(n.children) nextLevel.push(...n.children);
             }
+            if(hasMore) { update(root); await new Promise(r => setTimeout(r, duration + 100)); }
+            currentLevel = nextLevel;
+            if(currentLevel.length === 0) break;
         }
+        isAnimating = false;
+    }
+
+    async function collapseStepByStep() {
+        if(isAnimating || !root) return;
+        isAnimating = true;
+        let hasMore = true;
+        while(hasMore) {
+            hasMore = false;
+            let maxDepth = -1;
+            const visible = root.descendants();
+            visible.forEach(n => { if(n.children && n.depth > maxDepth) maxDepth = n.depth; });
+            if(maxDepth >= 0) {
+                visible.forEach(n => { if(n.children && n.depth === maxDepth) { n._children = n.children; n.children = null; hasMore = true; } });
+            }
+            if(hasMore) { update(root); await new Promise(r => setTimeout(r, duration + 100)); }
+        }
+        isAnimating = false;
+    }
+
+    // ==============================================
+    // PROCESS DATA
+    // ==============================================
+    function processData(data) {
+        if(!data.nodes.find(n => n.id === 'root')) {
+            data.nodes.push({id:'root', label: data.title, type:'root'});
+        }
+        const ids = new Set(data.nodes.map(n => n.id));
+        data.nodes.forEach(n => {
+            if(n.id !== 'root') {
+                if(!n.parent || n.parent === 'title' || !ids.has(n.parent)) n.parent = 'root';
+            } else { n.parent = ""; }
+        });
+        const rootNode = d3.stratify().id(d => d.id).parentId(d => d.parent)(data.nodes);
+        rootNode.x0 = height / 2;
+        rootNode.y0 = 0;
+        tree = d3.tree().nodeSize([80, 400]);
+        root = rootNode;
+        if(root.children) root.children.forEach(collapse);
+        update(root);
+        
+        // Trigger expand animation on initial load
+        setTimeout(() => {
+            expandStepByStep();
+        }, 300);
+    }
+
+    // ==============================================
+    // EVENT BINDINGS
+    // ==============================================
+    if(generateNoteBtn) generateNoteBtn.onclick = generateNote;
+    if(closeNotesBtn) closeNotesBtn.onclick = () => notesCard.classList.add('hidden-card');
+
+    chatToggle.onclick = toggleChat;
+    chatSendBtn.onclick = sendChatMessage;
+    chatInput.addEventListener('keydown', (e) => {
+        if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
     });
+
+    document.getElementById('expand-all').onclick = () => expandStepByStep();
+    document.getElementById('collapse-all').onclick = () => collapseStepByStep();
+    document.getElementById('zoom-in').onclick = () => svg.transition().duration(300).call(zoom.scaleBy, 1.3);
+    document.getElementById('zoom-out').onclick = () => svg.transition().duration(300).call(zoom.scaleBy, 0.7);
+    const fitBtn = document.getElementById('fit');
+    if(fitBtn) fitBtn.onclick = () => fitToView(true);
+
+    window.addEventListener('resize', () => fitToView(false));
 });

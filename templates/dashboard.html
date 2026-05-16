@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindMap.AI | Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body>
+    <header class="dash-header">
+        <a href="/" class="logo">MindMap<span>.AI</span></a>
+        <div class="user-actions">
+            <button class="logout-btn" onclick="logout()">Log Out</button>
+        </div>
+    </header>
+
+    <main class="dash-main">
+        <h1 class="section-title">Your Mindmaps</h1>
+        
+        <div class="grid" id="mindmap-grid">
+            <!-- Create New Card -->
+            <div class="card create-card" onclick="openCreateModal()">
+                <div class="create-icon">+</div>
+                <div>Create new mindmap</div>
+            </div>
+            
+            <!-- Existing maps will be injected here via JS -->
+        </div>
+    </main>
+
+    <!-- Create Modal -->
+    <div class="modal-overlay" id="create-modal">
+        <div class="modal-box">
+            <button class="modal-close" onclick="closeCreateModal()">×</button>
+            <h2>New Mindmap</h2>
+            <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 1.5rem;">Paste your syllabus or study material below. AI will extract and structure it automatically.</p>
+            
+            <textarea id="syllabus-input" rows="8" placeholder="Enter text here..."></textarea>
+            
+            <button id="generate-btn" class="btn-primary" onclick="generateMap()">Generate Map</button>
+        </div>
+    </div>
+
+    <script>
+        // Load Maps on init
+        document.addEventListener('DOMContentLoaded', loadMaps);
+
+        async function loadMaps() {
+            const grid = document.getElementById('mindmap-grid');
+            
+            // Keep the create card
+            const createCard = grid.firstElementChild;
+            grid.innerHTML = '';
+            grid.appendChild(createCard);
+
+            try {
+                const res = await fetch('/api/get_mindmaps');
+                if(!res.ok) {
+                    if(res.status === 401) window.location.href = '/';
+                    return;
+                }
+                const maps = await res.json();
+                
+                maps.forEach(m => {
+                    const card = document.createElement('a');
+                    card.href = `/app/${m.id}`;
+                    card.className = 'card';
+                    
+                    const dateObj = new Date(m.created_at);
+                    const dateStr = dateObj.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+                    
+                    card.innerHTML = `
+                        <div class="card-title">${m.title}</div>
+                        <div class="card-meta">
+                            <span>${dateStr}</span>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            } catch(e) {
+                console.error("Error loading maps", e);
+            }
+        }
+
+        async function generateMap() {
+            const text = document.getElementById('syllabus-input').value.trim();
+            if(!text) return alert("Please enter syllabus text.");
+
+            const btn = document.getElementById('generate-btn');
+            btn.disabled = true;
+            btn.innerHTML = `<div class="loading-state"><div class="spinner"></div> Synthesizing...</div>`;
+
+            try {
+                // 1. Generate Tree
+                const r = await fetch('/generate_mindmap', {
+                    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({syllabus:text})
+                });
+                if(!r.ok) throw new Error("API Error generating mindmap");
+                const d = await r.json();
+
+                // 2. Save to DB
+                const saveRes = await fetch('/api/save_mindmap', {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({
+                        title: d.title || "Mindmap " + new Date().toLocaleDateString(),
+                        nodes: d.nodes
+                    })
+                });
+                
+                if(!saveRes.ok) throw new Error("Error saving mindmap");
+                
+                const saveData = await saveRes.json();
+                
+                // 3. Redirect to Viewer
+                window.location.href = `/app/${saveData.mindmap_id}`;
+
+            } catch(e) {
+                console.error(e);
+                alert("Error: " + e.message);
+                btn.disabled = false;
+                btn.innerHTML = `Generate Map`;
+            }
+        }
+
+        async function logout() {
+            await fetch('/api/logout', {method: 'POST'});
+            window.location.href = '/';
+        }
+
+        function openCreateModal() {
+            document.getElementById('create-modal').classList.add('active');
+        }
+
+        function closeCreateModal() {
+            document.getElementById('create-modal').classList.remove('active');
+        }
+    </script>
+</body>
+</html>

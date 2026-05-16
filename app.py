@@ -7,11 +7,67 @@ from dotenv import load_dotenv
 import dataclasses
 import typing
 import traceback
+import uuid
+from datetime import datetime
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # Load environment variables
 load_dotenv(override=True)
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "fallback_secret")
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL")
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
+login_manager = LoginManager()
+login_manager.init_app(app)
+
+# --- Database Models ---
+class User(UserMixin, db.Model):
+    id = db.Column(db.String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Mindmap(db.Model):
+    id = db.Column(db.String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.String, db.ForeignKey('user.id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    nodes = db.relationship('Node', backref='mindmap', lazy=True, cascade='all, delete-orphan')
+
+class Node(db.Model):
+    id = db.Column(db.String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    mindmap_id = db.Column(db.String, db.ForeignKey('mindmap.id'), nullable=False)
+    client_id = db.Column(db.String, nullable=False) # 'root', 'node-1'
+    parent_client_id = db.Column(db.String, nullable=True)
+    label = db.Column(db.String(500), nullable=False)
+    type = db.Column(db.String(50), nullable=False)
+    notes = db.relationship('Note', backref='node', lazy=True, cascade='all, delete-orphan')
+
+class Note(db.Model):
+    id = db.Column(db.String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    node_id = db.Column(db.String, db.ForeignKey('node.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class ChatMessage(db.Model):
+    id = db.Column(db.String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    node_id = db.Column(db.String, db.ForeignKey('node.id'), nullable=False)
+    role = db.Column(db.String(10), nullable=False)  # 'user' or 'ai'
+    content = db.Column(db.Text, nullable=False)
+    order_index = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(user_id)
+
+with app.app_context():
+    db.create_all()
 
 # Configure Gemini API
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -39,8 +95,22 @@ class MindMapData(typing.TypedDict):
     nodes: list[MindMapNode]
 
 @app.route('/')
-def index():
-    return render_template('index.html')
+def landing():
+    return render_template('landing.html')
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    return render_template('dashboard.html')
+
+@app.route('/app/<mindmap_id>')
+@login_required
+def index(mindmap_id):
+    # Ensure mindmap belongs to user
+    mm = Mindmap.query.filter_by(id=mindmap_id, user_id=current_user.id).first()
+    if not mm:
+        return "Mindmap not found or unauthorized.", 404
+    return render_template('index.html', mindmap_id=mindmap_id, mindmap_title=mm.title)
 
 @app.route('/generate_mindmap', methods=['POST'])
 def generate_mindmap():
@@ -196,6 +266,160 @@ def generate_note():
         print(f"Error generating note: {e}")
         traceback.print_exc()
         return jsonify({'note': f"Error generating note: {str(e)}"}), 500
+
+# --- Auth Routes ---
+@app.route('/api/signup', methods=['POST'])
+def signup():
+    data = request.get_json()
+    email = data.get('email')
+    password = data.get('password')
+    if User.query.filter_by(email=email).first():
+        return jsonify({"error": "Email already exists"}), 400
+    user = User(email=email, password_hash=generate_password_hash(password))
+    db.session.add(user)
+    db.session.commit()
+    login_user(user)
+    return jsonify({"success": True, "email": user.email})
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    email = data.get('email')
+    password = data.get('password')
+    user = User.query.filter_by(email=email).first()
+    if user and check_password_hash(user.password_hash, password):
+        login_user(user)
+        return jsonify({"success": True, "email": user.email})
+    return jsonify({"error": "Invalid email or password"}), 401
+
+@app.route('/api/logout', methods=['POST'])
+@login_required
+def logout():
+    logout_user()
+    return jsonify({"success": True})
+
+@app.route('/api/user', methods=['GET'])
+def get_user():
+    if current_user.is_authenticated:
+        return jsonify({"email": current_user.email})
+    return jsonify({"email": None})
+
+# --- Database Routes ---
+@app.route('/api/save_mindmap', methods=['POST'])
+@login_required
+def save_mindmap():
+    data = request.get_json()
+    title = data.get('title')
+    nodes_data = data.get('nodes', [])
+    
+    mm = Mindmap(user_id=current_user.id, title=title)
+    db.session.add(mm)
+    db.session.commit()
+    
+    for n in nodes_data:
+        node = Node(
+            mindmap_id=mm.id,
+            client_id=n.get('id'),
+            parent_client_id=n.get('parent'),
+            label=n.get('label'),
+            type=n.get('type')
+        )
+        db.session.add(node)
+    
+    db.session.commit()
+    return jsonify({"success": True, "mindmap_id": mm.id})
+
+@app.route('/api/get_mindmaps', methods=['GET'])
+@login_required
+def get_mindmaps():
+    maps = Mindmap.query.filter_by(user_id=current_user.id).order_by(Mindmap.created_at.desc()).all()
+    res = [{"id": m.id, "title": m.title, "created_at": m.created_at.isoformat()} for m in maps]
+    return jsonify(res)
+
+@app.route('/api/load_mindmap/<mindmap_id>', methods=['GET'])
+@login_required
+def load_mindmap(mindmap_id):
+    mm = Mindmap.query.filter_by(id=mindmap_id, user_id=current_user.id).first()
+    if not mm: return jsonify({"error": "Not found"}), 404
+    nodes = Node.query.filter_by(mindmap_id=mm.id).all()
+    node_list = [{
+        "id": n.client_id,
+        "parent": n.parent_client_id,
+        "label": n.label,
+        "type": n.type
+    } for n in nodes]
+    return jsonify({"title": mm.title, "nodes": node_list})
+
+@app.route('/api/save_note', methods=['POST'])
+@login_required
+def save_note():
+    data = request.get_json()
+    mindmap_id = data.get('mindmap_id')
+    client_id = data.get('client_id')
+    content = data.get('content')
+    
+    node = Node.query.filter_by(mindmap_id=mindmap_id, client_id=client_id).first()
+    if not node: return jsonify({"error": "Node not found"}), 404
+    
+    note = Note.query.filter_by(node_id=node.id).first()
+    if note:
+        note.content = content
+    else:
+        note = Note(node_id=node.id, content=content)
+        db.session.add(note)
+    
+    db.session.commit()
+    return jsonify({"success": True})
+
+@app.route('/api/get_note', methods=['POST'])
+@login_required
+def get_note_db():
+    data = request.get_json()
+    mindmap_id = data.get('mindmap_id')
+    client_id = data.get('client_id')
+    
+    node = Node.query.filter_by(mindmap_id=mindmap_id, client_id=client_id).first()
+    if not node: return jsonify({"note": None})
+    
+    note = Note.query.filter_by(node_id=node.id).first()
+    if not note: return jsonify({"note": None})
+    return jsonify({"note": note.content})
+
+# --- Chat History Routes ---
+@app.route('/api/save_chat', methods=['POST'])
+@login_required
+def save_chat():
+    data = request.get_json()
+    mindmap_id = data.get('mindmap_id')
+    client_id = data.get('client_id')
+    role = data.get('role')  # 'user' or 'ai'
+    content = data.get('content')
+    
+    node = Node.query.filter_by(mindmap_id=mindmap_id, client_id=client_id).first()
+    if not node: return jsonify({"error": "Node not found"}), 404
+    
+    # Get next order index
+    last_msg = ChatMessage.query.filter_by(node_id=node.id).order_by(ChatMessage.order_index.desc()).first()
+    next_index = (last_msg.order_index + 1) if last_msg else 0
+    
+    msg = ChatMessage(node_id=node.id, role=role, content=content, order_index=next_index)
+    db.session.add(msg)
+    db.session.commit()
+    return jsonify({"success": True, "order_index": next_index})
+
+@app.route('/api/get_chat', methods=['POST'])
+@login_required
+def get_chat():
+    data = request.get_json()
+    mindmap_id = data.get('mindmap_id')
+    client_id = data.get('client_id')
+    
+    node = Node.query.filter_by(mindmap_id=mindmap_id, client_id=client_id).first()
+    if not node: return jsonify({"messages": []})
+    
+    messages = ChatMessage.query.filter_by(node_id=node.id).order_by(ChatMessage.order_index.asc()).all()
+    result = [{"role": m.role, "content": m.content} for m in messages]
+    return jsonify({"messages": result})
 
 if __name__ == '__main__':
     app.run("0.0.0.0", debug=True, port=5000)
