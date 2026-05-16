@@ -801,6 +801,103 @@ label {
     color: #52525b;
 }
 
+/* Onboarding Guides */
+.guide-hint {
+    position: fixed;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    color: white;
+    padding: 12px 18px;
+    border-radius: 14px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    pointer-events: none;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    animation: guidePopUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.node-hint {
+    bottom: 32px;
+    right: 32px;
+    border-left: 3px solid var(--accent);
+}
+
+.ai-hint {
+    bottom: 90px;
+    left: 32px;
+    background: rgba(204, 255, 0, 0.95);
+    color: #000;
+    font-weight: 600;
+    border: none;
+}
+
+.ai-hint .guide-arrow {
+    border-top: 8px solid rgba(204, 255, 0, 0.95);
+}
+
+.guide-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: guidePulse 1.5s infinite;
+}
+
+.guide-arrow {
+    position: absolute;
+    bottom: -8px;
+    left: 24px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 8px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Confetti Effect */
+.confetti-container {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.confetti {
+    position: absolute;
+    width: 6px; height: 6px;
+    background: var(--accent);
+    opacity: 0;
+}
+
+@keyframes guidePopUp {
+    from { opacity: 0; transform: translateY(20px) scale(0.9); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes guideFadeOut {
+    from { opacity: 1; transform: translateY(0) scale(1); }
+    to { opacity: 0; transform: translateY(15px) scale(0.95); }
+}
+
+/* AI Hint specific exit - slide left */
+.ai-hint.guide-fade-out {
+    animation: aiFadeOut 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+}
+
+@keyframes aiFadeOut {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(-20px); }
+}
+
+@keyframes confettiExplosion {
+    0% { transform: translate(0, 0) scale(1); opacity: 1; }
+    100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+}
+
 .chat-input:disabled {
     opacity: 0.5;
 }

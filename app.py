@@ -24,6 +24,10 @@ app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "fallback_secret")
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("DATABASE_URL")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    "pool_pre_ping": True,
+    "pool_recycle": 300,
+}
 
 db = SQLAlchemy(app)
 oauth = OAuth(app)
@@ -90,7 +94,7 @@ class ChatMessage(db.Model):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(user_id)
+    return db.session.get(User, user_id)
 
 with app.app_context():
     db.create_all()

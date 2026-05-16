@@ -122,14 +122,39 @@
     <div id="note-controls" class="hidden"></div>
     <div id="query-res" class="hidden"></div>
 
+    <!-- Onboarding Guides -->
+    <div id="onboarding-guides">
+        <div class="guide-hint node-hint">
+            <div class="guide-dot"></div>
+            <span>Click a node to expand or generate notes</span>
+        </div>
+        <div class="guide-hint ai-hint">
+            <span>Need help? Ask AI here!</span>
+            <div class="guide-arrow"></div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
-        MathJax = {
-            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true,
+                processEnvironments: true
+            },
+            options: {
+                skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+            },
+            startup: {
+                pageReady: () => {
+                    return MathJax.startup.defaultPageReady();
+                }
+            }
         };
     </script>
-    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}?v=12"></script>
 </body>
 </html>

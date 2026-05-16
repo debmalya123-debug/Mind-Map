@@ -1,81 +1,115 @@
-# Sankalp.AI - Intelligent Mind Map Generator
+# MindMap.AI ✦ Intelligent Knowledge Synthesis
 
-A powerful, AI-powered Mind Mapping tool that transforms syllabus text into interactive, hierarchical study visualisations. Built with **Flask**, **Google Gemini AI**, and **D3.js**.
+[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Flask](https://img.shields.io/badge/Flask-2.0+-000000.svg?style=for-the-badge&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
+[![Gemini](https://img.shields.io/badge/Google_Gemini-AI-orange.svg?style=for-the-badge&logo=google-gemini&logoColor=white)](https://ai.google.dev/)
+[![D3.js](https://img.shields.io/badge/D3.js-v7-F9A03C.svg?style=for-the-badge&logo=d3.js&logoColor=white)](https://d3js.org/)
 
-## 🌟 Key Features
 
-- **AI-Powered Visualization**: Instantly turns any text or syllabus into a structured mind map.
-- **Liquid Glass UI**: A premium, modern, glassmorphism-inspired interface for a distraction-free study experience.
-- **Static Tree Layout**: Clean, organized left-to-right tree structure (NotebookLM style) with zero overlap.
-- **Interactive Nodes**:
-  - **Expand/Collapse**: Progressive disclosure of topics.
-  - **Drag & Drop**: Manually arrange nodes to customize your view.
-  - **Zoom & Pan**: Infinite canvas navigation.
-- **Ask AI**: Select any node and ask specific questions to get instant, context-aware answers.
-- **Smart Study Notes**: Generate comprehensive, Markdown-formatted study notes with tables and equations for any node.
-- **Mobile Optimized**: Fully responsive design that works seamlessly on touch devices.
-
-## 🛠️ Tech Stack
-
-- **Backend**: Python, Flask
-- **AI Engine**: Google Gemini API (Primary: `gemini-2.5-flash-lite`)
-- **Frontend**: HTML5, CSS3 (Custom Glassmorphism), D3.js (v7)
-- **Rendering**: Marked.js (Markdown), MathJax (LaTeX Equations)
-
-## 🚀 Setup & Installation
-
-1.  **Clone the Repository**
-
-    ```bash
-    git clone <repository-url>
-    cd Mind-Map
-    ```
-
-2.  **Install Dependencies**
-
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-3.  **Environment Configuration**
-    Create a `.env` file in the root directory and add your Google Gemini API key:
-
-    ```env
-    GEMINI_API_KEY=your_api_key_here
-    ```
-
-4.  **Run the Application**
-
-    ```bash
-    python app.py
-    ```
-
-5.  **Access the App**
-    Open your browser and navigate to: `http://localhost:5000`
-
-## 📖 Usage Guide
-
-1.  **Generate Map**: Paste your syllabus or topic text into the input box on the left and click "Generate Mind Map".
-2.  **Explore**: Click nodes to expand/collapse sub-topics. Drag nodes to rearrange them.
-3.  **Ask Questions**: Click a node to select it. Use the "Ask AI" box in the left panel to ask clarifying questions about that specific topic.
-4.  **Create Notes**: With a node selected, click "Generate Note" in the right sidebar (if closed, clicking a node opens it). The AI will auto-generate a detailed study guide for you.
-
-## 🔧 Troubleshooting
-
-- **"Generate Map" Button Not Working?**
-
-  - Ensure you have a valid `.env` file with `GEMINI_API_KEY`.
-  - Hard refresh your browser (`Ctrl+F5`) to clear old JavaScript cache.
-  - Check the terminal for any Python errors.
-
-- **"Error connecting to AI" in Notes?**
-  - The app attempts to use `gemini-2.5-flash-lite` first. If it fails (e.g., overloaded), it falls back to `gemini-1.5-flash`.
-  - Check your internet connection.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please open an issue or submit a pull request for any improvements.
+**MindMap.AI** is a premium, AI-driven visualization tool designed to transform dense academic syllabi, complex documentation, or lengthy text blocks into intuitive, hierarchical mind maps. Built for students, researchers, and lifelong learners, it combines cutting-edge LLMs with a high-performance visual engine to streamline the path from information to insight.
 
 ---
 
-_Built for the Future of Learning._
+## ✦ Key Features
+
+### 🧠 One-Click Cognitive Mapping
+Instantly convert any text into a structured tree of knowledge. Our AI engine (powered by Google Gemini) intelligently categorizes content into **Main Topics**, **Sub-Topics**, and **Granular Details**, creating a logical flow for study.
+
+### 🌐 Dynamic Interactive Canvas
+- **Fluid Animations**: Experience smooth, sequential expand/collapse transitions that maintain spatial context.
+- **Precision Navigation**: Infinite zoom, panning, and a "Fit to View" system built with D3.js v7.
+- **Auto-Layout**: NotebookLM-style tree architecture that ensures zero node overlap and maximum readability.
+
+### 📝 Automated Study Intelligence
+- **Deep-Dive Notes**: Select any node to generate comprehensive, Markdown-formatted study guides.
+- **LaTeX Support**: Native rendering of complex mathematical equations and scientific formulas using MathJax.
+- **Contextual Ask AI**: A persistent sidebar chat that understands your current focus. Ask clarifying questions about specific nodes and get instant, context-aware answers.
+
+### 🗃️ Persistent Knowledge Library
+- **Cloud Saving**: Your mind maps, generated notes, and even AI chat histories are securely persisted in a dedicated database.
+- **Multi-Auth**: Secure access via traditional email/password or seamless **Google OAuth 2.0** integration.
+- **Liquid Glass UI**: A state-of-the-art interface featuring modern glassmorphism, ambient glow effects, and a distraction-free dark theme.
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technologies |
+| :--- | :--- |
+| **Backend** | Python, Flask, SQLAlchemy (PostgreSQL/SQLite) |
+| **AI Engine** | Google GenAI SDK (Gemini 2.5 Flash Lite, 1.5 Flash) |
+| **Frontend** | Vanilla JS (ES6+), D3.js v7, CSS3 (Glassmorphism) |
+| **Auth** | Authlib, Google OAuth 2.0, Flask-Login |
+| **Parsing** | Marked.js (Markdown), MathJax (LaTeX) |
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Python 3.9+
+- [Google Gemini API Key](https://aistudio.google.com/app/apikey)
+- (Optional) [uv](https://github.com/astral-sh/uv) for lightning-fast environment management.
+
+### Installation & Setup
+
+1.  **Clone the Repository**
+    ```bash
+    git clone https://github.com/yourusername/Mind-Map.git
+    cd Mind-Map
+    ```
+
+2.  **Environment Configuration**
+    Create a `.env` file in the root directory:
+    ```env
+    SECRET_KEY=your_secret_key_here
+    GEMINI_API_KEY=your_google_gemini_api_key
+    DATABASE_URL=sqlite:///mindmap.db
+    GOOGLE_CLIENT_ID=your_google_client_id
+    GOOGLE_CLIENT_SECRET=your_google_client_secret
+    ```
+
+3.  **Install Dependencies**
+    Using `pip`:
+    ```bash
+    pip install -r requirements.txt
+    ```
+    Or using `uv` (recommended):
+    ```bash
+    uv pip install -r requirements.txt
+    ```
+
+4.  **Initialize & Run**
+    ```bash
+    python app.py
+    ```
+    Access the application at `http://localhost:5000`.
+
+---
+
+## 📖 Usage Guide
+
+1.  **Landing**: Click "Launch App" and sign in (or use Google).
+2.  **Dashboard**: Click the **"+"** card to create a new map. Paste your material (e.g., "Physics Quantum Mechanics Syllabus") and hit **Generate**.
+3.  **Interact**:
+    - **Click Nodes**: Select to open the study sidebar.
+    - **Generate Note**: Inside the sidebar, click the magic wand icon to create a detailed study guide.
+    - **Ask AI**: Use the floating chat bubble on the bottom right to ask questions specific to your selected topic.
+4.  **Management**: Your maps are automatically saved and accessible from the dashboard at any time.
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Whether it's a bug fix, a new feature, or a design improvement:
+1. Fork the project.
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`).
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).
+4. Push to the branch (`git push origin feature/AmazingFeature`).
+5. Open a Pull Request.
+
+---
+
+<p align="center">
+  Built with ❤️ by the Debmalya
+</p>

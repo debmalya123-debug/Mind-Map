@@ -296,7 +296,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderNote(markdown) {
         noteContent.innerHTML = marked.parse(markdown);
-        if(window.MathJax) MathJax.typesetPromise([noteContent]);
+        if (window.MathJax && MathJax.typesetPromise) {
+            MathJax.typesetPromise([noteContent]).catch((err) => console.error('MathJax error:', err));
+        }
     }
 
     async function generateNote() {
@@ -486,12 +488,16 @@ document.addEventListener('DOMContentLoaded', () => {
         msg.className = `chat-msg ${role}`;
         if(role === 'ai') {
             msg.innerHTML = marked.parse(content);
-            if(window.MathJax) MathJax.typesetPromise([msg]);
         } else {
             msg.textContent = content;
         }
         chatMessages.appendChild(msg);
         chatMessages.scrollTop = chatMessages.scrollHeight;
+
+        // Typeset after appending to DOM
+        if (role === 'ai' && window.MathJax && MathJax.typesetPromise) {
+            MathJax.typesetPromise([msg]).catch((err) => console.error('MathJax error:', err));
+        }
     }
 
     // ==============================================
@@ -614,4 +620,53 @@ document.addEventListener('DOMContentLoaded', () => {
     if(fitBtn) fitBtn.onclick = () => fitToView(true);
 
     window.addEventListener('resize', () => fitToView(false));
+
+    // --- Onboarding Logic ---
+    const guides = document.getElementById('onboarding-guides');
+    const aiHint = document.querySelector('.ai-hint');
+    const nodeHint = document.querySelector('.node-hint');
+    
+    if (guides) {
+        const spawnConfetti = (x, y) => {
+            for(let i=0; i<12; i++) {
+                const c = document.createElement('div');
+                c.className = 'confetti';
+                c.style.left = x + 'px';
+                c.style.top = y + 'px';
+                c.style.setProperty('--tx', (Math.random() - 0.5) * 120 + 'px');
+                c.style.setProperty('--ty', (Math.random() - 0.5) * 120 + 'px');
+                c.style.background = ['#ccff00', '#fff', '#333'][Math.floor(Math.random()*3)];
+                c.style.animation = `confettiExplosion ${0.6 + Math.random()}s ease-out forwards`;
+                document.body.appendChild(c);
+                setTimeout(() => c.remove(), 2000);
+            }
+        };
+
+        // Pop effect for node hint
+        setTimeout(() => {
+            if(nodeHint) {
+                const rect = nodeHint.getBoundingClientRect();
+                spawnConfetti(rect.left + rect.width/2, rect.top + rect.height/2);
+            }
+        }, 400);
+
+        // Auto-dismiss logic for all guides
+        const dismissAll = () => {
+            if(nodeHint) nodeHint.classList.add('guide-fade-out');
+            if(aiHint) aiHint.classList.add('guide-fade-out');
+            setTimeout(() => { if(guides) guides.remove(); }, 1000);
+        };
+
+        // AI hint specific click dismissal
+        if(chatToggle) {
+            chatToggle.addEventListener('click', () => {
+                if(aiHint && !aiHint.classList.contains('guide-fade-out')) {
+                    aiHint.classList.add('guide-fade-out');
+                }
+            }, { once: true });
+        }
+
+        // Global timeout to ensure everything fades out
+        setTimeout(dismissAll, 8000);
+    }
 });
