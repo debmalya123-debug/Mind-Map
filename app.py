@@ -2,8 +2,9 @@ import os
 import json
 from google import genai
 from google.genai import types
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from dotenv import load_dotenv
+from authlib.integrations.flask_client import OAuth
 import dataclasses
 import typing
 import traceback
@@ -15,6 +16,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 # Load environment variables
 load_dotenv(override=True)
+if not os.getenv('VERCEL'):
+    os.environ['AUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "fallback_secret")
@@ -23,6 +26,17 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 
 db = SQLAlchemy(app)
+oauth = OAuth(app)
+
+oauth.register(
+    name='google',
+    client_id=os.getenv('GOOGLE_CLIENT_ID'),
+    client_secret=os.getenv('GOOGLE_CLIENT_SECRET'),
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={
+        'scope': 'openid email profile'
+    }
+)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'landing'
@@ -309,6 +323,36 @@ def login():
 def logout():
     logout_user()
     return jsonify({"success": True})
+
+@app.route('/login/google')
+def login_google():
+    redirect_uri = url_for('auth_google_callback', _external=True)
+    return oauth.google.authorize_redirect(redirect_uri)
+
+@app.route('/auth/google/callback')
+def auth_google_callback():
+    try:
+        token = oauth.google.authorize_access_token()
+        user_info = token.get('userinfo')
+        if not user_info:
+            return redirect(url_for('landing'))
+            
+        email = user_info.get('email')
+        if not email:
+            return redirect(url_for('landing'))
+            
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            # Create user with an empty string as password_hash to avoid NOT NULL constraints
+            user = User(email=email, password_hash="")
+            db.session.add(user)
+            db.session.commit()
+            
+        login_user(user, remember=True)
+        return redirect(url_for('dashboard'))
+    except Exception as e:
+        print(f"OAuth error: {e}")
+        return redirect(url_for('landing'))
 
 @app.route('/api/user', methods=['GET'])
 def get_user():
