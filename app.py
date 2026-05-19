@@ -405,6 +405,20 @@ def delete_mindmap(mindmap_id):
     db.session.commit()
     return jsonify({"success": True})
 
+@app.route('/api/rename_mindmap/<mindmap_id>', methods=['PUT'])
+@login_required
+def rename_mindmap(mindmap_id):
+    data = request.get_json()
+    new_title = data.get('title')
+    if not new_title or not new_title.strip():
+        return jsonify({"error": "Title is required"}), 400
+    mm = Mindmap.query.filter_by(id=mindmap_id, user_id=current_user.id).first()
+    if not mm: return jsonify({"error": "Not found or unauthorized"}), 404
+    mm.title = new_title.strip()
+    db.session.commit()
+    return jsonify({"success": True})
+
+
 @app.route('/api/load_mindmap/<mindmap_id>', methods=['GET'])
 @login_required
 def load_mindmap(mindmap_id):

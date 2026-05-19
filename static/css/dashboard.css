@@ -256,6 +256,10 @@ body {
     text-align: left;
 }
 
+.menu-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
 .menu-item.delete {
     color: #ef4444;
 }
@@ -317,7 +321,8 @@ body {
     font-weight: 500;
 }
 
-.modal-box textarea {
+.modal-box textarea,
+.modal-box input[type="text"] {
     width: 100%;
     background: rgba(255,255,255,0.05);
     border: 1px solid var(--border);
@@ -325,12 +330,16 @@ body {
     padding: 1rem;
     color: var(--text);
     font-family: inherit;
-    resize: vertical;
     outline: none;
     margin-bottom: 1.5rem;
 }
 
-.modal-box textarea:focus {
+.modal-box textarea {
+    resize: vertical;
+}
+
+.modal-box textarea:focus,
+.modal-box input[type="text"]:focus {
     border-color: var(--accent);
 }
 
