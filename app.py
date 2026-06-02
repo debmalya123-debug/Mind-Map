@@ -1,10 +1,11 @@
 import os
 import json
 import re
+import requests
 from youtube_transcript_api import YouTubeTranscriptApi
 from google import genai
 from google.genai import types
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session, Response, stream_with_context
 from dotenv import load_dotenv
 from authlib.integrations.flask_client import OAuth
 import dataclasses
@@ -185,104 +186,139 @@ def generate_youtube_mindmap():
     if not video_id:
         return jsonify({"error": "Invalid YouTube URL format."}), 400
 
-    has_transcript = True
-    transcript_text = ""
-    video_meta = None
-
-    try:
-        # Fetch transcript
-        transcript_list = YouTubeTranscriptApi().fetch(video_id)
-        # Concatenate transcript texts
-        transcript_text = " ".join([t.text for t in transcript_list])
-    except Exception as e:
-        print(f"Failed to fetch transcript: {e}")
-        has_transcript = False
-
-    if not has_transcript or not transcript_text.strip():
-        # Fallback: fetch metadata
-        video_meta = fetch_youtube_metadata(video_id)
-        if not video_meta or not video_meta.get("title"):
-            return jsonify({"error": "Could not retrieve transcript or video information for this YouTube video. Please ensure the video exists."}), 400
-
-    # Build prompt for Gemini
-    if has_transcript:
-        prompt = f"""
-        Analyze the following video transcript text and generate a hierarchical structure for a mind map.
-        The output must be a JSON object strictly following this schema:
-        {{
-          "title": "Main Topic/Subject of the Video",
-          "nodes": [
-            {{
-              "id": "must be unique, e.g., node-1",
-              "label": "Concise text for the node",
-              "parent": "id of the parent node (or 'title' if it's a top-level module)",
-              "type": "main_topic" (for modules) or "sub_topic" (for concepts) or "detail" (for specifics)
-            }}
-          ]
-        }}
+    def generate():
+        # Step 1: Validate URL and start fetching metadata
+        yield "data: " + json.dumps({"step": "validate", "status": "success", "message": "YouTube URL validated successfully."}) + "\n\n"
         
-        Ensure the 'parent' field correctly links nodes to create a tree structure. 
-        The root nodes should have 'parent' set to "title".
+        has_transcript = True
+        transcript_text = ""
+        video_meta = None
         
-        Video Transcript:
-        {transcript_text}
-        """
-    else:
-        prompt = f"""
-        The YouTube video "{video_meta['title']}" by "{video_meta['author']}" does not have subtitles/captions enabled.
-        Generate a detailed hierarchical structure for a mind map explaining the topic of this video based on its title and subject matter.
-        The output must be a JSON object strictly following this schema:
-        {{
-          "title": "{video_meta['title']}",
-          "nodes": [
-            {{
-              "id": "must be unique, e.g., node-1",
-              "label": "Concise text for the node",
-              "parent": "id of the parent node (or 'title' if it's a top-level module)",
-              "type": "main_topic" (for modules) or "sub_topic" (for concepts) or "detail" (for specifics)
-            }}
-          ]
-        }}
-        
-        Ensure the 'parent' field correctly links nodes to create a tree structure. 
-        The root nodes should have 'parent' set to "title".
-        """
-
-    # Model Fallback Strategy
-    models_to_try = ["gemini-2.5-flash-lite", "gemini-1.5-flash", "gemini-2.0-flash-exp"]
-    
-    for model_name in models_to_try:
+        # Step 2: Fetch transcript / metadata
+        yield "data: " + json.dumps({"step": "transcript", "status": "pending", "message": "Retrieving subtitles/captions from YouTube..."}) + "\n\n"
         try:
-            print(f"Attempting YouTube mindmap generation with: {model_name}")
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.7,
-                    top_p=0.95,
-                    top_k=40,
-                    max_output_tokens=8192,
-                    response_mime_type="application/json"
-                )
-            )
-            
-            raw_text = response.text
-            print(f"Raw AI Output: {raw_text[:200]}...") 
-
-            clean_text = raw_text.strip()
-            if clean_text.startswith("```json"):
-                clean_text = clean_text[7:]
-            if clean_text.endswith("```"):
-                clean_text = clean_text[:-3]
-            
-            result = json.loads(clean_text)
-            return jsonify(result)
-
+            transcript_list = YouTubeTranscriptApi().fetch(video_id)
+            transcript_text = " ".join([t.text for t in transcript_list])
         except Exception as e:
-            print(f"Model {model_name} failed: {e}")
-            continue
+            print(f"Failed to fetch transcript: {e}")
+            has_transcript = False
 
-    return jsonify({"error": "All AI models failed to generate a mind map from the transcript."}), 500
+        if not has_transcript or not transcript_text.strip():
+            # Fallback to metadata
+            try:
+                video_meta = fetch_youtube_metadata(video_id)
+            except Exception as e:
+                print(f"Failed to fetch metadata: {e}")
+                
+            if not video_meta or not video_meta.get("title"):
+                yield "data: " + json.dumps({"step": "error", "message": "Could not retrieve transcript or video information. Please ensure the video exists and has captions enabled."}) + "\n\n"
+                return
+
+        yield "data: " + json.dumps({"step": "transcript", "status": "success", "message": "Subtitles retrieved successfully."}) + "\n\n"
+
+        # Step 3: Analyze content with Gemini AI
+        yield "data: " + json.dumps({"step": "ai_generation", "status": "pending", "message": "Analyzing video content with Gemini AI..."}) + "\n\n"
+
+        if has_transcript:
+            prompt = f"""
+            Analyze the following video transcript text and generate a hierarchical structure for a mind map.
+            The output must be a JSON object strictly following this schema:
+            {{
+              "title": "Main Topic/Subject of the Video",
+              "nodes": [
+                {{
+                  "id": "must be unique, e.g., node-1",
+                  "label": "Concise text for the node",
+                  "parent": "id of the parent node (or 'title' if it's a top-level module)",
+                  "type": "main_topic" (for modules) or "sub_topic" (for concepts) or "detail" (for specifics)
+                }}
+              ]
+            }}
+            
+            Ensure the 'parent' field correctly links nodes to create a tree structure. 
+            The root nodes should have 'parent' set to "title".
+            
+            Video Transcript:
+            {transcript_text}
+            """
+        else:
+            prompt = f"""
+            The YouTube video "{video_meta['title']}" by "{video_meta['author']}" does not have subtitles/captions enabled.
+            Generate a detailed hierarchical structure for a mind map explaining the topic of this video based on its title and subject matter.
+            The output must be a JSON object strictly following this schema:
+            {{
+              "title": "{video_meta['title']}",
+              "nodes": [
+                {{
+                  "id": "must be unique, e.g., node-1",
+                  "label": "Concise text for the node",
+                  "parent": "id of the parent node (or 'title' if it's a top-level module)",
+                  "type": "main_topic" (for modules) or "sub_topic" (for concepts) or "detail" (for specifics)
+                }}
+              ]
+            }}
+            
+            Ensure the 'parent' field correctly links nodes to create a tree structure. 
+            The root nodes should have 'parent' set to "title".
+            """
+
+        models_to_try = ["gemini-2.5-flash-lite", "gemini-1.5-flash", "gemini-2.0-flash-exp"]
+        mindmap_result = None
+        is_unavailable = False
+
+        for model_name in models_to_try:
+            try:
+                print(f"Attempting YouTube mindmap generation with: {model_name}")
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.7,
+                        top_p=0.95,
+                        top_k=40,
+                        max_output_tokens=8192,
+                        response_mime_type="application/json"
+                    )
+                )
+                
+                raw_text = response.text
+                print(f"Raw AI Output: {raw_text[:200]}...") 
+
+                clean_text = raw_text.strip()
+                if clean_text.startswith("```json"):
+                    clean_text = clean_text[7:]
+                if clean_text.endswith("```"):
+                    clean_text = clean_text[:-3]
+                
+                mindmap_result = json.loads(clean_text)
+                break
+            except Exception as e:
+                err_str = str(e)
+                print(f"Model {model_name} failed: {err_str}")
+                if "503" in err_str or "UNAVAILABLE" in err_str or "high demand" in err_str:
+                    is_unavailable = True
+                continue
+
+        if not mindmap_result:
+            if is_unavailable:
+                yield "data: " + json.dumps({
+                    "step": "error",
+                    "code": "GEMINI_503_UNAVAILABLE",
+                    "message": "Gemini AI models are currently experiencing high demand. Please try again in a few moments."
+                }) + "\n\n"
+            else:
+                yield "data: " + json.dumps({
+                    "step": "error",
+                    "message": "All AI models failed to generate a mind map from the transcript."
+                }) + "\n\n"
+            return
+
+        yield "data: " + json.dumps({"step": "ai_generation", "status": "success", "message": "Mindmap structure synthesized by Gemini AI."}) + "\n\n"
+
+        # Step 4: Finalizing & Saving
+        yield "data: " + json.dumps({"step": "success", "data": mindmap_result}) + "\n\n"
+
+    return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 @app.route('/generate_mindmap', methods=['POST'])
 def generate_mindmap():
@@ -320,6 +356,7 @@ def generate_mindmap():
 
     # Model Fallback Strategy
     models_to_try = ["gemini-2.5-flash-lite", "gemini-1.5-flash", "gemini-2.0-flash-exp"]
+    is_unavailable = False
     
     for model_name in models_to_try:
         try:
@@ -350,9 +387,17 @@ def generate_mindmap():
             return jsonify(result)
 
         except Exception as e:
-            print(f"Model {model_name} failed: {e}")
+            err_str = str(e)
+            print(f"Model {model_name} failed: {err_str}")
+            if "503" in err_str or "UNAVAILABLE" in err_str or "high demand" in err_str:
+                is_unavailable = True
             continue
 
+    if is_unavailable:
+        return jsonify({
+            "error": "Gemini AI models are currently experiencing high demand. Please try again in a few moments.",
+            "code": "GEMINI_503_UNAVAILABLE"
+        }), 503
     return jsonify({"error": "All models failed to generate mind map."}), 500
 
 @app.route('/node_query', methods=['POST'])
@@ -377,15 +422,30 @@ def node_query():
     Provide a concise and helpful response (max 150 words) to the user's query regarding this topic.
     """
 
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
-            contents=prompt
-        )
-        return jsonify({"response": response.text})
-    except Exception as e:
-        print(f"Error querying node: {e}")
-        return jsonify({"error": str(e)}), 500
+    models_to_try = ["gemini-2.5-flash-lite", "gemini-1.5-flash", "gemini-2.0-flash-exp"]
+    is_unavailable = False
+    
+    for model_name in models_to_try:
+        try:
+            print(f"Attempting node query with: {model_name}")
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt
+            )
+            return jsonify({"response": response.text})
+        except Exception as e:
+            err_str = str(e)
+            print(f"Model {model_name} failed in query: {err_str}")
+            if "503" in err_str or "UNAVAILABLE" in err_str or "high demand" in err_str:
+                is_unavailable = True
+            continue
+
+    if is_unavailable:
+        return jsonify({
+            "error": "Gemini AI models are currently experiencing high demand. Please try again in a few moments.",
+            "code": "GEMINI_503_UNAVAILABLE"
+        }), 503
+    return jsonify({"error": "All models failed to generate response."}), 500
 
 @app.route('/generate_note', methods=['POST', 'GET']) # Allow GET for easier debug in browser if needed, but primarily POST
 def generate_note():
@@ -416,8 +476,8 @@ def generate_note():
         
         print(f"\n[DEBUG] Sending Prompt to Gemini:\n{prompt}\n[DEBUG] End Prompt\n")
 
-        models = ["gemini-2.5-flash-lite", "gemini-1.5-flash"]
-        last_error = None
+        models = ["gemini-2.5-flash-lite", "gemini-1.5-flash", "gemini-2.0-flash-exp"]
+        is_unavailable = False
         
         for m in models:
             try:
@@ -428,12 +488,19 @@ def generate_note():
                 )
                 return jsonify({'note': response.text})
             except Exception as inner_e:
-                print(f"Model {m} failed: {inner_e}")
-                last_error = inner_e
+                err_str = str(inner_e)
+                print(f"Model {m} failed: {err_str}")
+                if "503" in err_str or "UNAVAILABLE" in err_str or "high demand" in err_str:
+                    is_unavailable = True
                 continue
 
-        raise last_error if last_error else Exception("All models failed")
-
+        if is_unavailable:
+            return jsonify({
+                "note": "Gemini AI models are currently experiencing high demand. Please try again in a few moments.",
+                "error": "Gemini AI models are currently experiencing high demand. Please try again in a few moments.",
+                "code": "GEMINI_503_UNAVAILABLE"
+            }), 503
+        return jsonify({"note": "All models failed to generate study note.", "error": "All models failed to generate study note."}), 500
     except Exception as e:
         print(f"Error generating note: {e}")
         traceback.print_exc()

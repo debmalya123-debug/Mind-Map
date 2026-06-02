@@ -37,7 +37,7 @@
         <div class="modal-box">
             <button class="modal-close" onclick="closeCreateModal()">×</button>
             <h2>New Mindmap</h2>
-            <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 1.5rem;">Choose your input type and generate a structured mindmap instantly.</p>
+            <p id="create-modal-desc" style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 1.5rem;">Choose your input type and generate a structured mindmap instantly.</p>
             
             <div class="modal-tabs">
                 <button class="modal-tab active" id="tab-text" onclick="switchTab('text')">Text Input</button>
@@ -60,6 +60,55 @@
                 </div>
                 <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 0.75rem;">Enter a YouTube video URL that has subtitles or captions enabled:</p>
                 <input type="text" id="youtube-url-input" placeholder="https://www.youtube.com/watch?v=...">
+            </div>
+
+            <!-- Progress Indicator Pane -->
+            <div id="progress-indicator-pane" class="progress-container" style="display: none;">
+                <div class="progress-header">
+                    <span id="progress-status-text">Starting generation...</span>
+                    <span id="progress-percentage-text" class="progress-percentage">0%</span>
+                </div>
+                <div class="progress-bar-track">
+                    <div id="progress-bar-fill" class="progress-bar-fill"></div>
+                </div>
+                <div class="progress-steps">
+                    <div id="step-validate" class="progress-step">
+                        <div class="step-marker">
+                            <span>1</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <span>Validating YouTube URL & metadata</span>
+                    </div>
+                    <div id="step-transcript" class="progress-step">
+                        <div class="step-marker">
+                            <span>2</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <span>Retrieving subtitles/captions</span>
+                    </div>
+                    <div id="step-ai_generation" class="progress-step">
+                        <div class="step-marker">
+                            <span>3</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <span>Analyzing transcript with Gemini AI</span>
+                    </div>
+                    <div id="step-success" class="progress-step">
+                        <div class="step-marker">
+                            <span>4</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <span>Finalizing and rendering mindmap</span>
+                    </div>
+                </div>
             </div>
             
             <button id="generate-btn" class="btn-primary" onclick="generateMap()">Generate Map</button>
@@ -272,25 +321,183 @@
                 payload = { syllabus: text };
                 endpoint = '/generate_mindmap';
                 btn.innerHTML = `<div class="loading-state"><div class="spinner"></div> Synthesizing text...</div>`;
+                btn.disabled = true;
+
+                try {
+                    const r = await fetch(endpoint, {
+                        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+                    });
+                    const d = await r.json();
+                    if(!r.ok) {
+                        if (r.status === 503 || d.code === "GEMINI_503_UNAVAILABLE") {
+                            showUnavailableModal(d.error);
+                            btn.disabled = false;
+                            btn.innerHTML = `Generate Map`;
+                            return;
+                        }
+                        throw new Error(d.error || "API Error generating mindmap");
+                    }
+                    await saveAndRedirect(d);
+                } catch(e) {
+                    console.error(e);
+                    alert("Error: " + e.message);
+                    btn.disabled = false;
+                    btn.innerHTML = `Generate Map`;
+                }
             } else {
                 const url = document.getElementById('youtube-url-input').value.trim();
                 if(!url) return alert("Please enter a YouTube video URL.");
                 payload = { url: url };
                 endpoint = '/generate_youtube_mindmap';
-                btn.innerHTML = `<div class="loading-state"><div class="spinner"></div> Transcribing YouTube video...</div>`;
+
+                // Transition Modal UI to progress view
+                const modalTabs = document.querySelector('#create-modal .modal-tabs');
+                const modalDesc = document.getElementById('create-modal-desc');
+                const tabText = document.getElementById('tab-content-text');
+                const tabYoutube = document.getElementById('tab-content-youtube');
+                const progressPane = document.getElementById('progress-indicator-pane');
+
+                modalTabs.style.display = 'none';
+                modalDesc.style.display = 'none';
+                tabText.style.display = 'none';
+                tabYoutube.style.display = 'none';
+                btn.style.display = 'none';
+                progressPane.style.display = 'flex';
+
+                // Reset progress UI states
+                updateProgressUI('validate', 'active', 'Validating YouTube URL...', 15);
+
+                try {
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        const errData = await response.json().catch(() => ({}));
+                        if (response.status === 503 || errData.code === "GEMINI_503_UNAVAILABLE") {
+                            showUnavailableModal(errData.error || "Gemini AI models are currently experiencing high demand. Please try again in a few moments.");
+                            modalTabs.style.display = 'flex';
+                            modalDesc.style.display = 'block';
+                            tabYoutube.style.display = 'block';
+                            btn.style.display = 'block';
+                            btn.disabled = false;
+                            btn.innerHTML = `Generate Map`;
+                            progressPane.style.display = 'none';
+                            return;
+                        }
+                        throw new Error(errData.error || "Failed to initiate generation");
+                    }
+
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder("utf-8");
+                    let buffer = "";
+
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) break;
+
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split("\n");
+                        buffer = lines.pop(); // keep last incomplete line in buffer
+
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            if (trimmed.startsWith("data: ")) {
+                                const rawJSON = trimmed.substring(6);
+                                const eventData = JSON.parse(rawJSON);
+
+                                if (eventData.step === 'error') {
+                                    if (eventData.code === "GEMINI_503_UNAVAILABLE") {
+                                        showUnavailableModal(eventData.message);
+                                        modalTabs.style.display = 'flex';
+                                        modalDesc.style.display = 'block';
+                                        tabYoutube.style.display = 'block';
+                                        btn.style.display = 'block';
+                                        btn.disabled = false;
+                                        btn.innerHTML = `Generate Map`;
+                                        progressPane.style.display = 'none';
+                                        return;
+                                    }
+                                    throw new Error(eventData.message);
+                                }
+
+                                handleProgressEvent(eventData);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert("Error: " + e.message);
+                    
+                    // Restore original UI
+                    modalTabs.style.display = 'flex';
+                    modalDesc.style.display = 'block';
+                    tabYoutube.style.display = 'block';
+                    btn.style.display = 'block';
+                    btn.disabled = false;
+                    btn.innerHTML = `Generate Map`;
+                    progressPane.style.display = 'none';
+                }
+            }
+        }
+
+        function handleProgressEvent(event) {
+            const step = event.step;
+            const status = event.status;
+            const message = event.message || "";
+            
+            let percentage = 0;
+            if (step === 'validate') {
+                percentage = 25;
+            } else if (step === 'transcript') {
+                percentage = status === 'pending' ? 40 : 60;
+            } else if (step === 'ai_generation') {
+                percentage = status === 'pending' ? 80 : 95;
+            } else if (step === 'success') {
+                percentage = 100;
             }
 
-            btn.disabled = true;
+            updateProgressUI(step, status, message, percentage);
 
+            if (step === 'success' && event.data) {
+                saveAndRedirect(event.data);
+            }
+        }
+
+        function updateProgressUI(step, status, message, percentage) {
+            document.getElementById('progress-percentage-text').textContent = percentage + "%";
+            document.getElementById('progress-status-text').textContent = message;
+            document.getElementById('progress-bar-fill').style.width = percentage + "%";
+
+            const steps = ['validate', 'transcript', 'ai_generation', 'success'];
+            const currentIdx = steps.indexOf(step);
+
+            steps.forEach((s, idx) => {
+                const el = document.getElementById('step-' + s);
+                if (!el) return;
+
+                if (idx < currentIdx) {
+                    el.className = 'progress-step completed';
+                } else if (idx === currentIdx) {
+                    if (status === 'success') {
+                        el.className = 'progress-step completed';
+                    } else {
+                        el.className = 'progress-step active';
+                    }
+                } else {
+                    el.className = 'progress-step';
+                }
+            });
+        }
+
+        async function saveAndRedirect(d) {
+            const progressStatus = document.getElementById('progress-status-text');
+            if (progressStatus) {
+                progressStatus.textContent = "Saving mindmap to database...";
+            }
             try {
-                // 1. Generate Tree
-                const r = await fetch(endpoint, {
-                    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
-                });
-                const d = await r.json();
-                if(!r.ok) throw new Error(d.error || "API Error generating mindmap");
-
-                // 2. Save to DB
                 const saveRes = await fetch('/api/save_mindmap', {
                     method:'POST', headers:{'Content-Type':'application/json'},
                     body:JSON.stringify({
@@ -302,15 +509,19 @@
                 if(!saveRes.ok) throw new Error("Error saving mindmap");
                 
                 const saveData = await saveRes.json();
-                
-                // 3. Redirect to Viewer
                 window.location.href = `/app/${saveData.mindmap_id}`;
-
-            } catch(e) {
-                console.error(e);
-                alert("Error: " + e.message);
+            } catch (err) {
+                console.error(err);
+                alert("Error saving mindmap: " + err.message);
+                // Restore original UI
+                document.querySelector('#create-modal .modal-tabs').style.display = 'flex';
+                document.getElementById('create-modal-desc').style.display = 'block';
+                document.getElementById('tab-content-youtube').style.display = 'block';
+                const btn = document.getElementById('generate-btn');
+                btn.style.display = 'block';
                 btn.disabled = false;
                 btn.innerHTML = `Generate Map`;
+                document.getElementById('progress-indicator-pane').style.display = 'none';
             }
         }
 
@@ -321,6 +532,20 @@
 
         function openCreateModal() {
             document.getElementById('create-modal').classList.add('active');
+            
+            // Restore modal controls if hidden during previous run
+            document.querySelector('#create-modal .modal-tabs').style.display = 'flex';
+            document.getElementById('create-modal-desc').style.display = 'block';
+            document.getElementById('tab-content-text').style.display = 'block';
+            document.getElementById('tab-content-youtube').style.display = 'none';
+            
+            const btn = document.getElementById('generate-btn');
+            btn.style.display = 'block';
+            btn.disabled = false;
+            btn.innerHTML = `Generate Map`;
+            
+            document.getElementById('progress-indicator-pane').style.display = 'none';
+            
             switchTab('text');
             document.getElementById('syllabus-input').value = '';
             document.getElementById('youtube-url-input').value = '';
@@ -328,6 +553,34 @@
 
         function closeCreateModal() {
             document.getElementById('create-modal').classList.remove('active');
+        }
+
+        function showUnavailableModal(message) {
+            let modal = document.getElementById('gemini-unavailable-modal');
+            if (!modal) {
+                const modalHTML = `
+                    <div id="gemini-unavailable-modal" class="modal-overlay active" style="z-index: 9999; display: flex; justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(10px); transition: opacity 0.3s;">
+                        <div class="modal-box" style="background: #18181b; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 16px; padding: 2.25rem 2rem; width: 480px; max-width: 90%; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 20px rgba(239, 68, 68, 0.05); text-align: center; position: relative;">
+                            <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; color: #ef4444;">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                </svg>
+                            </div>
+                            <h3 style="font-size: 1.25rem; font-weight: 600; color: #ffffff; margin-bottom: 0.75rem; font-family: 'Inter', sans-serif;">Gemini Service Busy</h3>
+                            <p id="gemini-unavailable-message" style="color: #a1a1aa; font-size: 0.9rem; line-height: 1.6; margin-bottom: 1.75rem; font-family: 'Inter', sans-serif;"></p>
+                            <button onclick="document.getElementById('gemini-unavailable-modal').remove()" class="btn-primary" style="background: #ef4444; color: #ffffff; border: none; padding: 0.75rem 1.75rem; border-radius: 99px; font-weight: 600; font-size: 0.9rem; cursor: pointer; width: 100%; transition: opacity 0.2s; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);">Got it</button>
+                        </div>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', modalHTML);
+                modal = document.getElementById('gemini-unavailable-modal');
+            }
+            document.getElementById('gemini-unavailable-message').textContent = message || "Gemini AI models are currently experiencing high demand. Please try again in a few moments.";
+            modal.style.display = 'flex';
+            modal.style.opacity = '1';
+            modal.style.pointerEvents = 'auto';
         }
     </script>
 </body>

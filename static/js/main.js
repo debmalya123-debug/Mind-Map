@@ -321,6 +321,12 @@ document.addEventListener('DOMContentLoaded', () => {
             let res;
             try { res = JSON.parse(text); } catch(e) { throw new Error("Server Error"); }
 
+            if (r.status === 503 || (res && res.code === "GEMINI_503_UNAVAILABLE")) {
+                showUnavailableModal(res.error || "Gemini AI models are currently experiencing high demand. Please try again in a few moments.");
+                noteContent.innerHTML = `<div class="notes-empty"><p style="color:#ef4444;">⚠️ Gemini API is temporarily unavailable (High Demand). Please try again shortly.</p></div>`;
+                return;
+            }
+
             if(res.note) {
                 nodeNotes[data.id] = res.note;
                 renderNote(res.note);
@@ -462,6 +468,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 })
             });
             const res = await r.json();
+
+            if (r.status === 503 || (res && res.code === "GEMINI_503_UNAVAILABLE")) {
+                thinkingEl.remove();
+                showUnavailableModal(res.error || "Gemini AI models are currently experiencing high demand. Please try again in a few moments.");
+                addChatBubble("⚠️ Gemini API is temporarily unavailable due to high demand. Please try again shortly.", 'ai');
+                return;
+            }
+
             const md = res.response || "Sorry, I couldn't generate a response.";
             thinkingEl.remove();
             addChatBubble(md, 'ai');
@@ -668,5 +682,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Global timeout to ensure everything fades out
         setTimeout(dismissAll, 8000);
+    }
+
+    function showUnavailableModal(message) {
+        let modal = document.getElementById('gemini-unavailable-modal');
+        if (!modal) {
+            const modalHTML = `
+                <div id="gemini-unavailable-modal" class="modal-overlay active" style="z-index: 9999; display: flex; justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(10px); transition: opacity 0.3s;">
+                    <div class="modal-box" style="background: #18181b; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 16px; padding: 2.25rem 2rem; width: 480px; max-width: 90%; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 20px rgba(239, 68, 68, 0.05); text-align: center; position: relative;">
+                        <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); display: flex; align-items: center; justify-content: center; margin: 0 auto 1.25rem; color: #ef4444;">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="8" x2="12" y2="12"></line>
+                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                            </svg>
+                        </div>
+                        <h3 style="font-size: 1.25rem; font-weight: 600; color: #ffffff; margin-bottom: 0.75rem; font-family: 'Inter', sans-serif;">Gemini Service Busy</h3>
+                        <p id="gemini-unavailable-message" style="color: #a1a1aa; font-size: 0.9rem; line-height: 1.6; margin-bottom: 1.75rem; font-family: 'Inter', sans-serif;"></p>
+                        <button onclick="document.getElementById('gemini-unavailable-modal').remove()" class="btn-primary" style="background: #ef4444; color: #ffffff; border: none; padding: 0.75rem 1.75rem; border-radius: 99px; font-weight: 600; font-size: 0.9rem; cursor: pointer; width: 100%; transition: opacity 0.2s; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);">Got it</button>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            modal = document.getElementById('gemini-unavailable-modal');
+        }
+        document.getElementById('gemini-unavailable-message').textContent = message || "Gemini AI models are currently experiencing high demand. Please try again in a few moments.";
+        modal.style.display = 'flex';
+        modal.style.opacity = '1';
+        modal.style.pointerEvents = 'auto';
     }
 });
