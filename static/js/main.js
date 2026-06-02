@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const noteContent = document.getElementById('note-content');
     const generateNoteBtn = document.getElementById('generate-note-btn');
     const closeNotesBtn = document.getElementById('close-notes-btn');
+    const jumpToVideoBtn = document.getElementById('jump-to-video-btn');
 
     // Chat Widget
     const chatWidget = document.getElementById('ai-chat-widget');
@@ -33,6 +34,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const nodeNotes = {};
     const chatCache = {}; // { client_id: [{role, content}] }
     let currentChatNodeId = null;
+    let currentYoutubeVideoId = null;
+    let ytPlayer = null;
+    let ytPlayerReady = false;
 
     // --- Auth ---
     async function checkAuth() {
@@ -185,7 +189,32 @@ document.addEventListener('DOMContentLoaded', () => {
             .style("fill-opacity", 0)
             .style("fill", d => d.data.type === 'root' ? "#000" : "#fff");
 
+        // Add small grey clock badge for nodes that have timestamps
+        const badgeEnter = nodeEnter.filter(d => d.data.timestamp !== undefined && d.data.timestamp !== null)
+            .append('g')
+            .attr('class', 'node-timestamp-badge')
+            .style('opacity', 0);
+            
+        badgeEnter.append('circle')
+            .attr('r', 7)
+            .style('fill', '#27272a')
+            .style('stroke', '#52525b')
+            .style('stroke-width', 1);
+
+        badgeEnter.append('path')
+            .attr('d', 'M 0 -3.5 L 0 0 L 2 1')
+            .style('fill', 'none')
+            .style('stroke', '#d4d4d8')
+            .style('stroke-width', 1.2)
+            .style('stroke-linecap', 'round')
+            .style('stroke-linejoin', 'round');
+
         const nodeUpdate = nodeEnter.merge(node);
+        
+        // Position timestamp badge before transition to prevent layout jumps
+        nodeUpdate.select('.node-timestamp-badge')
+            .attr('transform', d => `translate(${d.width / 2}, -20)`);
+
         nodeUpdate.transition().duration(duration)
             .ease(d3.easeBackOut)
             .attr("transform", d => `translate(${d.y},${d.x}) scale(1)`);
@@ -200,6 +229,10 @@ document.addEventListener('DOMContentLoaded', () => {
             .style("opacity", 1);
 
         nodeUpdate.select('text').style("fill-opacity", 1);
+
+        nodeUpdate.select('.node-timestamp-badge')
+            .transition().duration(duration)
+            .style('opacity', 1);
 
         node.exit().transition().duration(duration)
             .ease(d3.easeCubicOut)
@@ -254,6 +287,35 @@ document.addEventListener('DOMContentLoaded', () => {
         nodeType.textContent = data.type;
         openNotesCard(data);
         updateChatForNode(data);
+
+        // Handle Jump to Video button
+        if (jumpToVideoBtn) {
+            if (data.timestamp !== undefined && data.timestamp !== null && currentYoutubeVideoId) {
+                jumpToVideoBtn.classList.remove('hidden');
+                const formatTime = (secs) => {
+                    const h = Math.floor(secs / 3600);
+                    const m = Math.floor((secs % 3600) / 60);
+                    const s = secs % 60;
+                    if (h > 0) {
+                        return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                    }
+                    return `${m}:${s.toString().padStart(2, '0')}`;
+                };
+                jumpToVideoBtn.innerHTML = `
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    Jump to Video [${formatTime(data.timestamp)}]
+                `;
+                jumpToVideoBtn.onclick = () => {
+                    if (ytPlayer && typeof ytPlayer.seekTo === 'function') {
+                        ytPlayer.seekTo(data.timestamp, true);
+                        ytPlayer.playVideo();
+                    }
+                };
+            } else {
+                jumpToVideoBtn.classList.add('hidden');
+                jumpToVideoBtn.onclick = null;
+            }
+        }
     }
 
     // ==============================================
@@ -586,9 +648,75 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==============================================
+    // YOUTUBE PLAYER INTEGRATION
+    // ==============================================
+    function initYoutubePlayer(videoId) {
+        const container = document.getElementById('video-player-container');
+        if (!container) return;
+
+        currentYoutubeVideoId = videoId;
+
+        if (videoId) {
+            container.classList.remove('hidden');
+            if (ytPlayer && typeof ytPlayer.cueVideoById === 'function') {
+                try {
+                    ytPlayer.cueVideoById(videoId);
+                } catch(e) {
+                    console.error("Error loading video in existing player:", e);
+                }
+            } else {
+                const createPlayer = () => {
+                    try {
+                        ytPlayer = new YT.Player('yt-player', {
+                            height: '100%',
+                            width: '100%',
+                            videoId: videoId,
+                            playerVars: {
+                                'playsinline': 1,
+                                'rel': 0,
+                                'modestbranding': 1
+                            },
+                            events: {
+                                'onReady': () => {
+                                    ytPlayerReady = true;
+                                    console.log("YouTube Player is ready");
+                                },
+                                'onError': (e) => {
+                                    console.error("YouTube Player Error:", e);
+                                }
+                            }
+                        });
+                    } catch (err) {
+                        console.error("Failed to construct YT.Player:", err);
+                    }
+                };
+
+                if (window.YT && window.YT.Player) {
+                    createPlayer();
+                } else {
+                    const oldCallback = window.onYouTubeIframeAPIReady;
+                    window.onYouTubeIframeAPIReady = () => {
+                        if (oldCallback) oldCallback();
+                        createPlayer();
+                    };
+                }
+            }
+        } else {
+            container.classList.add('hidden');
+            if (ytPlayer && typeof ytPlayer.stopVideo === 'function') {
+                try {
+                    ytPlayer.stopVideo();
+                } catch (e) {}
+            }
+        }
+    }
+
+    // ==============================================
     // PROCESS DATA
     // ==============================================
     function processData(data) {
+        initYoutubePlayer(data.youtube_video_id);
+
         if(!data.nodes.find(n => n.id === 'root')) {
             data.nodes.push({id:'root', label: data.title, type:'root'});
         }
@@ -611,6 +739,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Trigger expand animation on initial load after initial render settles
         setTimeout(() => {
             expandStepByStep();
+            initOnboarding(!!data.youtube_video_id);
         }, 800);
     }
 
@@ -635,13 +764,173 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.addEventListener('resize', () => fitToView(false));
 
+    // YouTube Player Minimize / Maximize toggle
+    const playerContainer = document.getElementById('video-player-container');
+    const minimizeBtn = document.getElementById('minimize-player-btn');
+    if (minimizeBtn && playerContainer) {
+        minimizeBtn.onclick = () => {
+            const isMin = playerContainer.classList.toggle('minimized');
+            const minIcon = minimizeBtn.querySelector('.min-icon');
+            const maxIcon = minimizeBtn.querySelector('.max-icon');
+            if (isMin) {
+                minIcon.classList.add('hidden');
+                maxIcon.classList.remove('hidden');
+            } else {
+                minIcon.classList.remove('hidden');
+                maxIcon.classList.add('hidden');
+            }
+        };
+    }
+
+    // Draggable & Resizable YouTube Player
+    const playerHeader = document.getElementById('video-player-header');
+    const resizeHandle = document.getElementById('player-resize-handle');
+
+    if (playerContainer && playerHeader) {
+        // Dragging Logic
+        let isDragging = false;
+        let startX, startY, startLeft, startTop;
+
+        const disableIframePointerEvents = (disable) => {
+            const iframe = playerContainer.querySelector('iframe');
+            if (iframe) {
+                iframe.style.pointerEvents = disable ? 'none' : 'auto';
+            }
+        };
+
+        playerHeader.style.cursor = 'grab';
+
+        playerHeader.addEventListener('mousedown', (e) => {
+            if (e.button !== 0 || e.target.closest('.player-ctrl-btn')) return;
+            
+            isDragging = true;
+            playerHeader.style.cursor = 'grabbing';
+            disableIframePointerEvents(true);
+            
+            startX = e.clientX;
+            startY = e.clientY;
+            
+            const rect = playerContainer.getBoundingClientRect();
+            const parentRect = playerContainer.parentElement.getBoundingClientRect();
+            startLeft = rect.left - parentRect.left;
+            startTop = rect.top - parentRect.top;
+            
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            
+            let newLeft = startLeft + dx;
+            let newTop = startTop + dy;
+            
+            const parent = playerContainer.parentElement;
+            if (parent) {
+                const parentRect = parent.getBoundingClientRect();
+                const containerRect = playerContainer.getBoundingClientRect();
+                
+                const maxLeft = parentRect.width - containerRect.width;
+                const maxTop = parentRect.height - containerRect.height;
+                
+                newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+                newTop = Math.max(0, Math.min(newTop, maxTop));
+            }
+            
+            playerContainer.style.left = `${newLeft}px`;
+            playerContainer.style.top = `${newTop}px`;
+            playerContainer.style.right = 'auto';
+            playerContainer.style.bottom = 'auto';
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                playerHeader.style.cursor = 'grab';
+                disableIframePointerEvents(false);
+            }
+        });
+    }
+
+    if (playerContainer && resizeHandle) {
+        // Resizing Logic
+        let isResizing = false;
+        let startWidth, startHeight, startMouseX, startMouseY;
+        let startOriginX, startOriginY, startDistance;
+
+        const disableIframePointerEvents = (disable) => {
+            const iframe = playerContainer.querySelector('iframe');
+            if (iframe) {
+                iframe.style.pointerEvents = disable ? 'none' : 'auto';
+            }
+        };
+
+        resizeHandle.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            if (playerContainer.classList.contains('minimized')) return;
+
+            isResizing = true;
+            startWidth = playerContainer.clientWidth;
+            startHeight = playerContainer.clientHeight;
+            startMouseX = e.clientX;
+            startMouseY = e.clientY;
+            
+            const rect = playerContainer.getBoundingClientRect();
+            startOriginX = rect.left;
+            startOriginY = rect.top;
+            
+            // Calculate starting radial distance from top-left corner
+            startDistance = Math.sqrt(
+                Math.pow(startMouseX - startOriginX, 2) + 
+                Math.pow(startMouseY - startOriginY, 2)
+            );
+            
+            disableIframePointerEvents(true);
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            
+            // Calculate current radial distance from top-left corner
+            const currentDistance = Math.sqrt(
+                Math.pow(e.clientX - startOriginX, 2) + 
+                Math.pow(e.clientY - startOriginY, 2)
+            );
+            
+            const scale = currentDistance / startDistance;
+            const newWidth = Math.max(265, Math.min(600, startWidth * scale));
+            
+            playerContainer.style.width = `${newWidth}px`;
+            
+            const iframeWrapper = document.getElementById('player-iframe-wrapper');
+            if (iframeWrapper) {
+                iframeWrapper.style.paddingTop = '0';
+                iframeWrapper.style.height = `${(newWidth * 9) / 16}px`;
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                disableIframePointerEvents(false);
+            }
+        });
+    }
+
     // --- Onboarding Logic ---
-    const guides = document.getElementById('onboarding-guides');
-    const aiHint = document.querySelector('.ai-hint');
-    const nodeHint = document.querySelector('.node-hint');
-    
-    if (guides) {
-        const spawnConfetti = (x, y) => {
+    function initOnboarding(hasYoutube) {
+        const guides = document.getElementById('onboarding-guides');
+        if (!guides) return;
+
+        // Clear existing guides and show the container
+        guides.innerHTML = '';
+        guides.style.display = 'block';
+
+        const spawnConfetti = (x, y, colors = ['#ccff00', '#fff', '#333']) => {
             for(let i=0; i<12; i++) {
                 const c = document.createElement('div');
                 c.className = 'confetti';
@@ -649,39 +938,97 @@ document.addEventListener('DOMContentLoaded', () => {
                 c.style.top = y + 'px';
                 c.style.setProperty('--tx', (Math.random() - 0.5) * 120 + 'px');
                 c.style.setProperty('--ty', (Math.random() - 0.5) * 120 + 'px');
-                c.style.background = ['#ccff00', '#fff', '#333'][Math.floor(Math.random()*3)];
+                c.style.background = colors[Math.floor(Math.random()*colors.length)];
                 c.style.animation = `confettiExplosion ${0.6 + Math.random()}s ease-out forwards`;
                 document.body.appendChild(c);
                 setTimeout(() => c.remove(), 2000);
             }
         };
 
-        // Pop effect for node hint
-        setTimeout(() => {
-            if(nodeHint) {
+        if (hasYoutube) {
+            // Create YouTube guides
+            const playerHint = document.createElement('div');
+            playerHint.className = 'guide-hint player-hint';
+            playerHint.innerHTML = `
+                <div class="guide-dot red-dot"></div>
+                <span>Use the video player to watch the companion video</span>
+                <div class="guide-arrow-left"></div>
+            `;
+
+            const ytNodeHint = document.createElement('div');
+            ytNodeHint.className = 'guide-hint yt-node-hint';
+            ytNodeHint.innerHTML = `
+                <div class="guide-dot red-dot"></div>
+                <span>Click a node with a clock badge to jump to its video section</span>
+            `;
+
+            guides.appendChild(playerHint);
+            guides.appendChild(ytNodeHint);
+
+            // Pop effect for YT node hint with red-themed confetti
+            setTimeout(() => {
+                const rect = ytNodeHint.getBoundingClientRect();
+                spawnConfetti(rect.left + rect.width/2, rect.top + rect.height/2, ['#ff0000', '#ffffff', '#18181b']);
+            }, 400);
+
+            // Auto-dismiss logic for YouTube guides
+            const dismissAll = () => {
+                playerHint.classList.add('guide-fade-out');
+                ytNodeHint.classList.add('guide-fade-out');
+                setTimeout(() => { 
+                    guides.innerHTML = ''; 
+                    guides.style.display = 'none'; 
+                }, 1000);
+            };
+
+            setTimeout(dismissAll, 10000);
+        } else {
+            // Create standard guides
+            const nodeHint = document.createElement('div');
+            nodeHint.className = 'guide-hint node-hint';
+            nodeHint.innerHTML = `
+                <div class="guide-dot"></div>
+                <span>Click a node to expand or generate notes</span>
+            `;
+
+            const aiHint = document.createElement('div');
+            aiHint.className = 'guide-hint ai-hint';
+            aiHint.innerHTML = `
+                <span>Need help? Ask AI here!</span>
+                <div class="guide-arrow"></div>
+            `;
+
+            guides.appendChild(nodeHint);
+            guides.appendChild(aiHint);
+
+            // Pop effect for node hint with standard colors
+            setTimeout(() => {
                 const rect = nodeHint.getBoundingClientRect();
-                spawnConfetti(rect.left + rect.width/2, rect.top + rect.height/2);
+                spawnConfetti(rect.left + rect.width/2, rect.top + rect.height/2, ['#ccff00', '#fff', '#333']);
+            }, 400);
+
+            // Auto-dismiss logic for standard guides
+            const dismissAll = () => {
+                nodeHint.classList.add('guide-fade-out');
+                aiHint.classList.add('guide-fade-out');
+                setTimeout(() => { 
+                    guides.innerHTML = ''; 
+                    guides.style.display = 'none'; 
+                }, 1000);
+            };
+
+            // AI hint specific click dismissal
+            if(chatToggle) {
+                const onChatClick = () => {
+                    if(aiHint && !aiHint.classList.contains('guide-fade-out')) {
+                        aiHint.classList.add('guide-fade-out');
+                    }
+                };
+                chatToggle.addEventListener('click', onChatClick, { once: true });
             }
-        }, 400);
 
-        // Auto-dismiss logic for all guides
-        const dismissAll = () => {
-            if(nodeHint) nodeHint.classList.add('guide-fade-out');
-            if(aiHint) aiHint.classList.add('guide-fade-out');
-            setTimeout(() => { if(guides) guides.remove(); }, 1000);
-        };
-
-        // AI hint specific click dismissal
-        if(chatToggle) {
-            chatToggle.addEventListener('click', () => {
-                if(aiHint && !aiHint.classList.contains('guide-fade-out')) {
-                    aiHint.classList.add('guide-fade-out');
-                }
-            }, { once: true });
+            setTimeout(dismissAll, 8000);
         }
-
-        // Global timeout to ensure everything fades out
-        setTimeout(dismissAll, 8000);
     }
 
     function showUnavailableModal(message) {

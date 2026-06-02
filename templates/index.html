@@ -31,6 +31,25 @@
         <div class="workspace">
             <main class="canvas-area">
                 <div id="viz-container"></div>
+
+                <!-- Floating YouTube Player -->
+                <div id="video-player-container" class="video-player-container hidden">
+                    <div class="video-player-header" id="video-player-header">
+                        <div class="video-player-info">
+                            <svg class="yt-icon" width="16" height="16" viewBox="0 0 24 24" fill="#ff0000"><path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.11C19.518 3.5 12 3.5 12 3.5s-7.518 0-9.388.503a3.003 3.003 0 0 0-2.11 2.11C0 8.033 0 12 0 12s0 3.967.502 5.837a3.003 3.003 0 0 0 2.11 2.11c1.87.503 9.388.503 9.388.503s7.518 0 9.388-.503a3.003 3.003 0 0 0 2.11-2.11C24 15.967 24 12 24 12s0-3.967-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                            <span class="video-player-title">Video Companion</span>
+                        </div>
+                        <button id="minimize-player-btn" class="player-ctrl-btn" title="Minimize/Maximize">
+                            <svg class="min-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                            <svg class="max-icon hidden" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                    </div>
+                    <div id="player-iframe-wrapper" class="player-iframe-wrapper">
+                        <div id="yt-player"></div>
+                    </div>
+                    <!-- Resize Handle -->
+                    <div id="player-resize-handle" class="player-resize-handle"></div>
+                </div>
                 
                 <!-- Floating Controls Pill -->
                 <div class="controls-pill">
@@ -76,6 +95,10 @@
             <button id="generate-note-btn" class="generate-btn">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
                 Generate Study Notes
+            </button>
+            <button id="jump-to-video-btn" class="jump-btn hidden">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Jump to Video Timestamp
             </button>
         </div>
         <div id="note-content" class="notes-card-content">
@@ -123,16 +146,7 @@
     <div id="query-res" class="hidden"></div>
 
     <!-- Onboarding Guides -->
-    <div id="onboarding-guides">
-        <div class="guide-hint node-hint">
-            <div class="guide-dot"></div>
-            <span>Click a node to expand or generate notes</span>
-        </div>
-        <div class="guide-hint ai-hint">
-            <span>Need help? Ask AI here!</span>
-            <div class="guide-arrow"></div>
-        </div>
-    </div>
+    <div id="onboarding-guides" style="display: none;"></div>
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -155,6 +169,7 @@
         };
     </script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="https://www.youtube.com/iframe_api"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}?v=12"></script>
 </body>
 </html>

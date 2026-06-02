@@ -883,6 +883,10 @@ label {
     to { opacity: 0; transform: translateY(15px) scale(0.95); }
 }
 
+.guide-fade-out {
+    animation: guideFadeOut 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+}
+
 /* AI Hint specific exit - slide left */
 .ai-hint.guide-fade-out {
     animation: aiFadeOut 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
@@ -940,5 +944,201 @@ label {
     .notes-panel { width: 100%; }
     .chat-panel { width: calc(100vw - 48px); }
     .controls-pill { bottom: 16px; }
+}
+
+/* ============================================= */
+/* FLOATING VIDEO PLAYER                         */
+/* ============================================= */
+.video-player-container {
+    position: absolute;
+    top: 24px;
+    left: 24px;
+    width: 320px;
+    background: rgba(12, 12, 12, 0.85);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.02);
+    z-index: 100;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.video-player-container.minimized {
+    width: 200px;
+}
+
+.video-player-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    user-select: none;
+}
+
+.video-player-container.minimized .video-player-header {
+    border-bottom-color: transparent;
+}
+
+.video-player-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.yt-icon {
+    flex-shrink: 0;
+    animation: pulse-red 2s infinite ease-in-out;
+}
+
+@keyframes pulse-red {
+    0%, 100% { opacity: 0.85; }
+    50% { opacity: 1; filter: drop-shadow(0 0 2px rgba(255, 0, 0, 0.5)); }
+}
+
+.video-player-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #e4e4e7;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.player-ctrl-btn {
+    width: 24px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.player-ctrl-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.player-ctrl-btn .max-icon.hidden,
+.player-ctrl-btn .min-icon.hidden {
+    display: none !important;
+}
+
+.player-iframe-wrapper {
+    width: 100%;
+    position: relative;
+    padding-top: 56.25%; /* 16:9 Aspect Ratio */
+    background: #000;
+    transition: max-height 0.3s ease-out, opacity 0.2s ease;
+    opacity: 1;
+}
+
+.video-player-container.minimized .player-iframe-wrapper {
+    max-height: 0 !important;
+    height: 0 !important;
+    opacity: 0;
+    padding-top: 0;
+    pointer-events: none;
+}
+
+#yt-player {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+/* ============================================= */
+/* JUMP TO TIMESTAMP BUTTON                      */
+/* ============================================= */
+.jump-btn {
+    width: 100%;
+    margin-top: 10px;
+    padding: 11px 20px;
+    background: linear-gradient(135deg, #ff0000 0%, #cc0000 100%);
+    color: #ffffff;
+    border: none;
+    border-radius: 12px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 12px rgba(255, 0, 0, 0.2);
+}
+
+.jump-btn:hover {
+    background: linear-gradient(135deg, #ff1a1a 0%, #e60000 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(255, 0, 0, 0.35);
+}
+
+.jump-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(255, 0, 0, 0.2);
+}
+
+.jump-btn.hidden {
+    display: none !important;
+}
+
+.player-resize-handle {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    width: 12px;
+    height: 12px;
+    cursor: nwse-resize;
+    background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.4) 50%);
+    z-index: 110;
+}
+
+/* Onboarding Guides - YouTube Specific */
+.player-hint {
+    top: 110px;
+    left: 368px;
+    border-left: 3px solid #ff0000;
+}
+
+.player-hint .guide-arrow-left {
+    position: absolute;
+    left: -8px;
+    top: calc(50% - 8px);
+    width: 0;
+    height: 0;
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+    border-right: 8px solid rgba(255, 255, 255, 0.1);
+}
+
+.yt-node-hint {
+    bottom: 32px;
+    right: 32px;
+    border-left: 3px solid #ff0000;
+}
+
+.red-dot {
+    background: #ff0000 !important;
+    animation: guideRedPulse 1.5s infinite !important;
+}
+
+@keyframes guideRedPulse {
+    0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(255, 0, 0, 0); }
+    100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
 }
 

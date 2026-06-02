@@ -462,7 +462,7 @@
             updateProgressUI(step, status, message, percentage);
 
             if (step === 'success' && event.data) {
-                saveAndRedirect(event.data);
+                saveAndRedirect(event.data, event.youtube_video_id);
             }
         }
 
@@ -492,7 +492,7 @@
             });
         }
 
-        async function saveAndRedirect(d) {
+        async function saveAndRedirect(d, youtubeVideoId = null) {
             const progressStatus = document.getElementById('progress-status-text');
             if (progressStatus) {
                 progressStatus.textContent = "Saving mindmap to database...";
@@ -502,7 +502,8 @@
                     method:'POST', headers:{'Content-Type':'application/json'},
                     body:JSON.stringify({
                         title: d.title || "Mindmap " + new Date().toLocaleDateString(),
-                        nodes: d.nodes
+                        nodes: d.nodes,
+                        youtube_video_id: youtubeVideoId
                     })
                 });
                 

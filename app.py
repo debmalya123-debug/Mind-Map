@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from authlib.integrations.flask_client import OAuth
 import dataclasses
 import typing
+from typing_extensions import TypedDict
 import traceback
 import uuid
 from datetime import datetime, timedelta
@@ -70,6 +71,7 @@ class Mindmap(db.Model):
     user_id = db.Column(db.String, db.ForeignKey('user.id'), nullable=False)
     title = db.Column(db.String(200), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    youtube_video_id = db.Column(db.String(50), nullable=True)
     nodes = db.relationship('Node', backref='mindmap', lazy=True, cascade='all, delete-orphan')
 
 class Node(db.Model):
@@ -79,6 +81,7 @@ class Node(db.Model):
     parent_client_id = db.Column(db.String, nullable=True)
     label = db.Column(db.String(500), nullable=False)
     type = db.Column(db.String(50), nullable=False)
+    timestamp = db.Column(db.Integer, nullable=True)
     notes = db.relationship('Note', backref='node', lazy=True, cascade='all, delete-orphan')
 
 class Note(db.Model):
@@ -101,6 +104,30 @@ def load_user(user_id):
 
 with app.app_context():
     db.create_all()
+    # Migration helper to add missing columns safely
+    try:
+        db.session.execute(db.text("SELECT youtube_video_id FROM mindmap LIMIT 1"))
+    except Exception:
+        db.session.rollback()
+        try:
+            db.session.execute(db.text("ALTER TABLE mindmap ADD COLUMN youtube_video_id VARCHAR(50)"))
+            db.session.commit()
+            print("Successfully migrated mindmap table: added youtube_video_id column.")
+        except Exception as migration_err:
+            db.session.rollback()
+            print(f"Failed to migrate mindmap table: {migration_err}")
+
+    try:
+        db.session.execute(db.text("SELECT timestamp FROM node LIMIT 1"))
+    except Exception:
+        db.session.rollback()
+        try:
+            db.session.execute(db.text("ALTER TABLE node ADD COLUMN timestamp INTEGER"))
+            db.session.commit()
+            print("Successfully migrated node table: added timestamp column.")
+        except Exception as migration_err:
+            db.session.rollback()
+            print(f"Failed to migrate node table: {migration_err}")
 
 # Configure Gemini API
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -117,13 +144,14 @@ except Exception as e:
 
 # Define schemas for structured output (referenced only, not strictly used with new SDK Pydantic yet unless we opt-in)
 # For now, we stick to JSON schema in prompt for maximum compatibility with Lite models.
-class MindMapNode(typing.TypedDict):
+class MindMapNode(TypedDict):
     id: str
     label: str
     parent: str
     type: str  # "main_topic", "sub_topic", "detail"
+    timestamp: typing.Optional[int]
 
-class MindMapData(typing.TypedDict):
+class MindMapData(TypedDict):
     title: str
     nodes: list[MindMapNode]
 
@@ -198,12 +226,21 @@ def generate_youtube_mindmap():
         yield "data: " + json.dumps({"step": "transcript", "status": "pending", "message": "Retrieving subtitles/captions from YouTube..."}) + "\n\n"
         try:
             transcript_list = YouTubeTranscriptApi().fetch(video_id)
-            transcript_text = " ".join([t.text for t in transcript_list])
+            
+            # Format each caption segment with its specific timestamp
+            formatted_segments = []
+            for item in transcript_list:
+                mins = int(item.start // 60)
+                secs = int(item.start % 60)
+                formatted_segments.append(f"[{mins:02d}:{secs:02d}] {item.text}")
+            transcript_text = "\n".join(formatted_segments)
+
         except Exception as e:
             print(f"Failed to fetch transcript: {e}")
             has_transcript = False
 
         if not has_transcript or not transcript_text.strip():
+            print("Transcript status: No transcript retrieved. Falling back to video title/metadata.")
             # Fallback to metadata
             try:
                 video_meta = fetch_youtube_metadata(video_id)
@@ -213,15 +250,23 @@ def generate_youtube_mindmap():
             if not video_meta or not video_meta.get("title"):
                 yield "data: " + json.dumps({"step": "error", "message": "Could not retrieve transcript or video information. Please ensure the video exists and has captions enabled."}) + "\n\n"
                 return
-
-        yield "data: " + json.dumps({"step": "transcript", "status": "success", "message": "Subtitles retrieved successfully."}) + "\n\n"
+            yield "data: " + json.dumps({"step": "transcript", "status": "success", "message": "No subtitles found. Falling back to title/metadata."}) + "\n\n"
+        else:
+            print("Transcript status: Subtitles retrieved successfully.")
+            yield "data: " + json.dumps({"step": "transcript", "status": "success", "message": "Subtitles retrieved successfully."}) + "\n\n"
 
         # Step 3: Analyze content with Gemini AI
         yield "data: " + json.dumps({"step": "ai_generation", "status": "pending", "message": "Analyzing video content with Gemini AI..."}) + "\n\n"
 
         if has_transcript:
             prompt = f"""
-            Analyze the following video transcript text and generate a hierarchical structure for a mind map.
+            Analyze the following video transcript text (which contains timestamps in [MM:SS] format) and generate a hierarchical structure for a mind map.
+            
+            RULES FOR TIMESTAMPS:
+            1. For nodes that refer to specific, concrete topics discussed at a particular point in the video, identify the precise timestamp marker in [MM:SS] format closest to when the topic begins.
+            2. Convert this [MM:SS] timestamp into total seconds as an integer (e.g., [02:15] -> 135) and set it as the "timestamp" value.
+            3. For high-level categories, root nodes, or general summary topics that span across the whole video or do not correspond to a specific segment, set the "timestamp" field to null.
+            
             The output must be a JSON object strictly following this schema:
             {{
               "title": "Main Topic/Subject of the Video",
@@ -230,7 +275,8 @@ def generate_youtube_mindmap():
                   "id": "must be unique, e.g., node-1",
                   "label": "Concise text for the node",
                   "parent": "id of the parent node (or 'title' if it's a top-level module)",
-                  "type": "main_topic" (for modules) or "sub_topic" (for concepts) or "detail" (for specifics)
+                  "type": "main_topic" or "sub_topic" or "detail",
+                  "timestamp": 135 or null
                 }}
               ]
             }}
@@ -253,7 +299,8 @@ def generate_youtube_mindmap():
                   "id": "must be unique, e.g., node-1",
                   "label": "Concise text for the node",
                   "parent": "id of the parent node (or 'title' if it's a top-level module)",
-                  "type": "main_topic" (for modules) or "sub_topic" (for concepts) or "detail" (for specifics)
+                  "type": "main_topic" or "sub_topic" or "detail",
+                  "timestamp": null
                 }}
               ]
             }}
@@ -262,9 +309,17 @@ def generate_youtube_mindmap():
             The root nodes should have 'parent' set to "title".
             """
 
-        models_to_try = ["gemini-2.5-flash-lite", "gemini-1.5-flash", "gemini-2.0-flash-exp"]
+        models_to_try = ["gemini-3.1-flash-lite","gemini-2.5-flash-lite"]
         mindmap_result = None
         is_unavailable = False
+
+        print("\n" + "="*50)
+        print("DEBUG YOUTUBE GENERATION:")
+        print(f"  video_id: {video_id}")
+        print(f"  has_transcript: {has_transcript}")
+        if has_transcript:
+            print(f"  transcript length: {len(transcript_text)} chars")
+        print("="*50 + "\n")
 
         for model_name in models_to_try:
             try:
@@ -277,12 +332,15 @@ def generate_youtube_mindmap():
                         top_p=0.95,
                         top_k=40,
                         max_output_tokens=8192,
-                        response_mime_type="application/json"
+                        response_mime_type="application/json",
+                        response_schema=MindMapData
                     )
                 )
                 
                 raw_text = response.text
-                print(f"Raw AI Output: {raw_text[:200]}...") 
+                print("\n" + "="*50 + "\nGEMINI RESPONSE RECEIVED:\n" + "="*50)
+                print(raw_text)
+                print("="*50 + "\n") 
 
                 clean_text = raw_text.strip()
                 if clean_text.startswith("```json"):
@@ -316,7 +374,7 @@ def generate_youtube_mindmap():
         yield "data: " + json.dumps({"step": "ai_generation", "status": "success", "message": "Mindmap structure synthesized by Gemini AI."}) + "\n\n"
 
         # Step 4: Finalizing & Saving
-        yield "data: " + json.dumps({"step": "success", "data": mindmap_result}) + "\n\n"
+        yield "data: " + json.dumps({"step": "success", "youtube_video_id": video_id, "data": mindmap_result}) + "\n\n"
 
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
@@ -355,7 +413,7 @@ def generate_mindmap():
     """
 
     # Model Fallback Strategy
-    models_to_try = ["gemini-2.5-flash-lite", "gemini-1.5-flash", "gemini-2.0-flash-exp"]
+    models_to_try = ["gemini-3.1-flash-lite","gemini-2.5-flash-lite"]
     is_unavailable = False
     
     for model_name in models_to_try:
@@ -422,7 +480,7 @@ def node_query():
     Provide a concise and helpful response (max 150 words) to the user's query regarding this topic.
     """
 
-    models_to_try = ["gemini-2.5-flash-lite", "gemini-1.5-flash", "gemini-2.0-flash-exp"]
+    models_to_try = ["gemini-3.1-flash-lite","gemini-2.5-flash-lite"]
     is_unavailable = False
     
     for model_name in models_to_try:
@@ -476,7 +534,7 @@ def generate_note():
         
         print(f"\n[DEBUG] Sending Prompt to Gemini:\n{prompt}\n[DEBUG] End Prompt\n")
 
-        models = ["gemini-2.5-flash-lite", "gemini-1.5-flash", "gemini-2.0-flash-exp"]
+        models = ["gemini-3.1-flash-lite","gemini-2.5-flash-lite"]
         is_unavailable = False
         
         for m in models:
@@ -580,8 +638,9 @@ def save_mindmap():
     data = request.get_json()
     title = data.get('title')
     nodes_data = data.get('nodes', [])
+    youtube_video_id = data.get('youtube_video_id')
     
-    mm = Mindmap(user_id=current_user.id, title=title)
+    mm = Mindmap(user_id=current_user.id, title=title, youtube_video_id=youtube_video_id)
     db.session.add(mm)
     db.session.commit()
     
@@ -591,7 +650,8 @@ def save_mindmap():
             client_id=n.get('id'),
             parent_client_id=n.get('parent'),
             label=n.get('label'),
-            type=n.get('type')
+            type=n.get('type'),
+            timestamp=n.get('timestamp')
         )
         db.session.add(node)
     
@@ -638,9 +698,10 @@ def load_mindmap(mindmap_id):
         "id": n.client_id,
         "parent": n.parent_client_id,
         "label": n.label,
-        "type": n.type
+        "type": n.type,
+        "timestamp": n.timestamp
     } for n in nodes]
-    return jsonify({"title": mm.title, "nodes": node_list})
+    return jsonify({"title": mm.title, "nodes": node_list, "youtube_video_id": mm.youtube_video_id})
 
 @app.route('/api/save_note', methods=['POST'])
 @login_required
