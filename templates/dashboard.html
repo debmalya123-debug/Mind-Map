@@ -37,9 +37,30 @@
         <div class="modal-box">
             <button class="modal-close" onclick="closeCreateModal()">×</button>
             <h2>New Mindmap</h2>
-            <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 1.5rem;">Paste your syllabus or study material below. AI will extract and structure it automatically.</p>
+            <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 1.5rem;">Choose your input type and generate a structured mindmap instantly.</p>
             
-            <textarea id="syllabus-input" rows="8" placeholder="Enter text here..."></textarea>
+            <div class="modal-tabs">
+                <button class="modal-tab active" id="tab-text" onclick="switchTab('text')">Text Input</button>
+                <button class="modal-tab" id="tab-youtube" onclick="switchTab('youtube')">YouTube Video <span class="badge-beta">Beta</span></button>
+            </div>
+            
+            <!-- Tab Contents -->
+            <div id="tab-content-text" class="tab-content-pane">
+                <textarea id="syllabus-input" rows="8" placeholder="Paste syllabus, textbook chapter, or study notes here..."></textarea>
+            </div>
+            
+            <div id="tab-content-youtube" class="tab-content-pane" style="display: none;">
+                <div class="alert-warning">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                        <line x1="12" y1="9" x2="12" y2="13"></line>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                    <span><strong>Beta feature:</strong> Only works with videos that have their own subtitles/captions, and in the English language only.</span>
+                </div>
+                <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 0.75rem;">Enter a YouTube video URL that has subtitles or captions enabled:</p>
+                <input type="text" id="youtube-url-input" placeholder="https://www.youtube.com/watch?v=...">
+            </div>
             
             <button id="generate-btn" class="btn-primary" onclick="generateMap()">Generate Map</button>
         </div>
@@ -217,21 +238,57 @@
             }
         }
 
-        async function generateMap() {
-            const text = document.getElementById('syllabus-input').value.trim();
-            if(!text) return alert("Please enter syllabus text.");
+        let activeTab = 'text';
 
+        function switchTab(mode) {
+            activeTab = mode;
+            
+            const tabText = document.getElementById('tab-text');
+            const tabYoutube = document.getElementById('tab-youtube');
+            const contentText = document.getElementById('tab-content-text');
+            const contentYoutube = document.getElementById('tab-content-youtube');
+            
+            if (mode === 'text') {
+                tabText.classList.add('active');
+                tabYoutube.classList.remove('active');
+                contentText.style.display = 'block';
+                contentYoutube.style.display = 'none';
+            } else {
+                tabText.classList.remove('active');
+                tabYoutube.classList.add('active');
+                contentText.style.display = 'none';
+                contentYoutube.style.display = 'block';
+            }
+        }
+
+        async function generateMap() {
             const btn = document.getElementById('generate-btn');
+            let payload = {};
+            let endpoint = '';
+            
+            if (activeTab === 'text') {
+                const text = document.getElementById('syllabus-input').value.trim();
+                if(!text) return alert("Please enter syllabus or study notes text.");
+                payload = { syllabus: text };
+                endpoint = '/generate_mindmap';
+                btn.innerHTML = `<div class="loading-state"><div class="spinner"></div> Synthesizing text...</div>`;
+            } else {
+                const url = document.getElementById('youtube-url-input').value.trim();
+                if(!url) return alert("Please enter a YouTube video URL.");
+                payload = { url: url };
+                endpoint = '/generate_youtube_mindmap';
+                btn.innerHTML = `<div class="loading-state"><div class="spinner"></div> Transcribing YouTube video...</div>`;
+            }
+
             btn.disabled = true;
-            btn.innerHTML = `<div class="loading-state"><div class="spinner"></div> Synthesizing...</div>`;
 
             try {
                 // 1. Generate Tree
-                const r = await fetch('/generate_mindmap', {
-                    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({syllabus:text})
+                const r = await fetch(endpoint, {
+                    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
                 });
-                if(!r.ok) throw new Error("API Error generating mindmap");
                 const d = await r.json();
+                if(!r.ok) throw new Error(d.error || "API Error generating mindmap");
 
                 // 2. Save to DB
                 const saveRes = await fetch('/api/save_mindmap', {
@@ -264,6 +321,9 @@
 
         function openCreateModal() {
             document.getElementById('create-modal').classList.add('active');
+            switchTab('text');
+            document.getElementById('syllabus-input').value = '';
+            document.getElementById('youtube-url-input').value = '';
         }
 
         function closeCreateModal() {

@@ -6,3 +6,5 @@ Flask-Login
 Flask-SQLAlchemy
 Authlib
 requests
+youtube-transcript-api
+

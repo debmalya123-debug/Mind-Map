@@ -1,5 +1,7 @@
 import os
 import json
+import re
+from youtube_transcript_api import YouTubeTranscriptApi
 from google import genai
 from google.genai import types
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
@@ -141,6 +143,146 @@ def index(mindmap_id):
     if not mm:
         return "Mindmap not found or unauthorized.", 404
     return render_template('index.html', mindmap_id=mindmap_id, mindmap_title=mm.title)
+
+def extract_youtube_id(url):
+    """
+    Extract the YouTube video ID from a URL.
+    Returns None if the URL is invalid or ID could not be extracted.
+    """
+    pattern = r'(?:https?://)?(?:www\.)?(?:youtube\.com/(?:watch\?v=|embed/|shorts/)|youtu\.be/)([a-zA-Z0-9_-]{11})'
+    match = re.search(pattern, url)
+    if match:
+        return match.group(1)
+    return None
+
+def fetch_youtube_metadata(video_id):
+    try:
+        url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
+        res = requests.get(url, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            return {
+                "title": data.get("title", ""),
+                "author": data.get("author_name", "")
+            }
+    except Exception as e:
+        print(f"Failed to fetch YouTube metadata: {e}")
+    return None
+
+@app.route('/generate_youtube_mindmap', methods=['POST'])
+@login_required
+def generate_youtube_mindmap():
+    if not client:
+        return jsonify({"error": "Gemini Client not initialized. Check API Key."}), 500
+
+    data = request.get_json()
+    url = data.get('url', '').strip()
+
+    if not url:
+        return jsonify({"error": "No YouTube URL provided"}), 400
+
+    video_id = extract_youtube_id(url)
+    if not video_id:
+        return jsonify({"error": "Invalid YouTube URL format."}), 400
+
+    has_transcript = True
+    transcript_text = ""
+    video_meta = None
+
+    try:
+        # Fetch transcript
+        transcript_list = YouTubeTranscriptApi().fetch(video_id)
+        # Concatenate transcript texts
+        transcript_text = " ".join([t.text for t in transcript_list])
+    except Exception as e:
+        print(f"Failed to fetch transcript: {e}")
+        has_transcript = False
+
+    if not has_transcript or not transcript_text.strip():
+        # Fallback: fetch metadata
+        video_meta = fetch_youtube_metadata(video_id)
+        if not video_meta or not video_meta.get("title"):
+            return jsonify({"error": "Could not retrieve transcript or video information for this YouTube video. Please ensure the video exists."}), 400
+
+    # Build prompt for Gemini
+    if has_transcript:
+        prompt = f"""
+        Analyze the following video transcript text and generate a hierarchical structure for a mind map.
+        The output must be a JSON object strictly following this schema:
+        {{
+          "title": "Main Topic/Subject of the Video",
+          "nodes": [
+            {{
+              "id": "must be unique, e.g., node-1",
+              "label": "Concise text for the node",
+              "parent": "id of the parent node (or 'title' if it's a top-level module)",
+              "type": "main_topic" (for modules) or "sub_topic" (for concepts) or "detail" (for specifics)
+            }}
+          ]
+        }}
+        
+        Ensure the 'parent' field correctly links nodes to create a tree structure. 
+        The root nodes should have 'parent' set to "title".
+        
+        Video Transcript:
+        {transcript_text}
+        """
+    else:
+        prompt = f"""
+        The YouTube video "{video_meta['title']}" by "{video_meta['author']}" does not have subtitles/captions enabled.
+        Generate a detailed hierarchical structure for a mind map explaining the topic of this video based on its title and subject matter.
+        The output must be a JSON object strictly following this schema:
+        {{
+          "title": "{video_meta['title']}",
+          "nodes": [
+            {{
+              "id": "must be unique, e.g., node-1",
+              "label": "Concise text for the node",
+              "parent": "id of the parent node (or 'title' if it's a top-level module)",
+              "type": "main_topic" (for modules) or "sub_topic" (for concepts) or "detail" (for specifics)
+            }}
+          ]
+        }}
+        
+        Ensure the 'parent' field correctly links nodes to create a tree structure. 
+        The root nodes should have 'parent' set to "title".
+        """
+
+    # Model Fallback Strategy
+    models_to_try = ["gemini-2.5-flash-lite", "gemini-1.5-flash", "gemini-2.0-flash-exp"]
+    
+    for model_name in models_to_try:
+        try:
+            print(f"Attempting YouTube mindmap generation with: {model_name}")
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.7,
+                    top_p=0.95,
+                    top_k=40,
+                    max_output_tokens=8192,
+                    response_mime_type="application/json"
+                )
+            )
+            
+            raw_text = response.text
+            print(f"Raw AI Output: {raw_text[:200]}...") 
+
+            clean_text = raw_text.strip()
+            if clean_text.startswith("```json"):
+                clean_text = clean_text[7:]
+            if clean_text.endswith("```"):
+                clean_text = clean_text[:-3]
+            
+            result = json.loads(clean_text)
+            return jsonify(result)
+
+        except Exception as e:
+            print(f"Model {model_name} failed: {e}")
+            continue
+
+    return jsonify({"error": "All AI models failed to generate a mind map from the transcript."}), 500
 
 @app.route('/generate_mindmap', methods=['POST'])
 def generate_mindmap():
