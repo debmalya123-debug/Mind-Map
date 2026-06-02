@@ -266,6 +266,7 @@ def generate_youtube_mindmap():
             1. For nodes that refer to specific, concrete topics discussed at a particular point in the video, identify the precise timestamp marker in [MM:SS] format closest to when the topic begins.
             2. Convert this [MM:SS] timestamp into total seconds as an integer (e.g., [02:15] -> 135) and set it as the "timestamp" value.
             3. For high-level categories, root nodes, or general summary topics that span across the whole video or do not correspond to a specific segment, set the "timestamp" field to null.
+            4. Crucially, the generated mind map MUST contain a minimum of 5 nodes with valid, non-null timestamps representing key segments of the video.
             
             The output must be a JSON object strictly following this schema:
             {{
