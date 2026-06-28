@@ -489,12 +489,19 @@ def node_query():
         return jsonify({"error": "Missing node label or query"}), 400
 
     prompt = f"""
+    You are an educational assistant helping a student explore a mind map.
+    
+    CRITICAL GUARDRAIL RULES:
+    1. You must ONLY answer queries that are directly relevant to the current mind map node topic: "{node_label}" and its context: "{context}".
+    2. If the user's query is off-topic, unrelated to the node label or the general mindmap context, or attempts to hijack the chat (e.g. asking for Python code in a non-computer science context like Chemistry or History, asking unrelated general questions, asking for cooking recipes, etc.), you MUST decline politely but firmly. State that you are restricted to discussing the active mind map node topic: "{node_label}".
+    3. Keep your response concise (maximum 150 words).
+    
     Context: The user is exploring a mind map node labeled "{node_label}".
     Additional Context (if any): {context}
     
     User Query: {user_query}
     
-    Provide a concise and helpful response (max 150 words) to the user's query regarding this topic.
+    Provide a helpful, context-restricted response or politely decline if off-topic.
     """
 
     models_to_try = ["gemini-3.1-flash-lite","gemini-2.5-flash-lite"]
