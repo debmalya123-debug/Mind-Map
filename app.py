@@ -663,7 +663,7 @@ def save_mindmap():
 @login_required
 def get_mindmaps():
     maps = Mindmap.query.filter_by(user_id=current_user.id).order_by(Mindmap.created_at.desc()).all()
-    res = [{"id": m.id, "title": m.title, "created_at": m.created_at.isoformat()} for m in maps]
+    res = [{"id": m.id, "title": m.title, "created_at": m.created_at.isoformat(), "youtube_video_id": m.youtube_video_id} for m in maps]
     return jsonify(res)
 
 @app.route('/api/delete_mindmap/<mindmap_id>', methods=['DELETE'])

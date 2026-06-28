@@ -147,6 +147,7 @@ body {
     color: var(--text-dim);
     display: flex;
     justify-content: space-between;
+    align-items: center;
 }
 
 /* Create New Card */
@@ -586,4 +587,24 @@ body {
     .dash-header { padding: 1.5rem 2rem; }
     .dash-main { padding: 2rem; }
     .grid { grid-template-columns: 1fr; }
+}
+
+/* YouTube Indicator Badge */
+.yt-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #ff0000;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), filter 0.2s ease, opacity 0.2s ease;
+    opacity: 0.8;
+}
+
+.yt-indicator:hover {
+    transform: scale(1.15);
+    filter: drop-shadow(0 0 5px rgba(255, 0, 0, 0.7));
+    opacity: 1;
+}
+
+.yt-indicator svg {
+    display: block;
 }
