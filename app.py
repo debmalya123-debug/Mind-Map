@@ -86,6 +86,7 @@ class Mindmap(db.Model):
     title = db.Column(db.String(200), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     youtube_video_id = db.Column(db.String(50), nullable=True)
+    last_opened_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=True)
     nodes = db.relationship('Node', backref='mindmap', lazy=True, cascade='all, delete-orphan')
 
 class Node(db.Model):
@@ -130,6 +131,20 @@ with app.app_context():
         except Exception as migration_err:
             db.session.rollback()
             print(f"Failed to migrate mindmap table: {migration_err}")
+
+    try:
+        db.session.execute(db.text("SELECT last_opened_at FROM mindmap LIMIT 1"))
+    except Exception:
+        db.session.rollback()
+        try:
+            db.session.execute(db.text("ALTER TABLE mindmap ADD COLUMN last_opened_at TIMESTAMP"))
+            db.session.commit()
+            db.session.execute(db.text("UPDATE mindmap SET last_opened_at = created_at WHERE last_opened_at IS NULL"))
+            db.session.commit()
+            print("Successfully migrated mindmap table: added last_opened_at column.")
+        except Exception as migration_err:
+            db.session.rollback()
+            print(f"Failed to migrate mindmap table last_opened_at: {migration_err}")
 
     try:
         db.session.execute(db.text("SELECT timestamp FROM node LIMIT 1"))
@@ -695,7 +710,13 @@ def save_mindmap():
 @login_required
 def get_mindmaps():
     maps = Mindmap.query.filter_by(user_id=current_user.id).order_by(Mindmap.created_at.desc()).all()
-    res = [{"id": m.id, "title": m.title, "created_at": m.created_at.isoformat(), "youtube_video_id": m.youtube_video_id} for m in maps]
+    res = [{
+        "id": m.id,
+        "title": m.title,
+        "created_at": m.created_at.isoformat(),
+        "last_opened_at": m.last_opened_at.isoformat() if m.last_opened_at else m.created_at.isoformat(),
+        "youtube_video_id": m.youtube_video_id
+    } for m in maps]
     return jsonify(res)
 
 @app.route('/api/delete_mindmap/<mindmap_id>', methods=['DELETE'])
@@ -726,6 +747,10 @@ def rename_mindmap(mindmap_id):
 def load_mindmap(mindmap_id):
     mm = Mindmap.query.filter_by(id=mindmap_id, user_id=current_user.id).first()
     if not mm: return jsonify({"error": "Not found"}), 404
+    
+    mm.last_opened_at = datetime.utcnow()
+    db.session.commit()
+    
     nodes = Node.query.filter_by(mindmap_id=mm.id).all()
     node_list = [{
         "id": n.client_id,

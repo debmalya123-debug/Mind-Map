@@ -53,10 +53,15 @@
                     </svg>
                     <input type="text" id="search-maps" class="search-input" placeholder="Search mindmaps..." oninput="filterDashboardMaps()">
                 </div>
-                <div class="filter-group">
+                <div class="filter-group" id="filter-group">
                     <button class="filter-btn active" data-filter="all" onclick="setDashboardFilter('all')">All</button>
                     <button class="filter-btn" data-filter="youtube" onclick="setDashboardFilter('youtube')">YouTube</button>
                     <button class="filter-btn" data-filter="text" onclick="setDashboardFilter('text')">Text</button>
+                </div>
+                <div class="filter-group" id="sort-group">
+                    <button class="filter-btn active" data-sort="newest" onclick="setDashboardSort('newest')">Newest</button>
+                    <button class="filter-btn" data-sort="recent" onclick="setDashboardSort('recent')">Recently Studied</button>
+                    <button class="filter-btn" data-sort="alpha" onclick="setDashboardSort('alpha')">Alphabetical</button>
                 </div>
             </div>
         </div>
@@ -172,6 +177,7 @@
         let allMindmaps = [];
         let currentFilter = 'all';
         let searchQuery = '';
+        let currentSort = 'newest';
 
         document.addEventListener('DOMContentLoaded', loadMaps);
 
@@ -221,6 +227,15 @@
                 
                 return matchesSearch && matchesFilter;
             });
+
+            // Sort mindmaps
+            if (currentSort === 'newest') {
+                filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            } else if (currentSort === 'recent') {
+                filtered.sort((a, b) => new Date(b.last_opened_at) - new Date(a.last_opened_at));
+            } else if (currentSort === 'alpha') {
+                filtered.sort((a, b) => a.title.localeCompare(b.title));
+            }
 
             filtered.forEach((m, index) => {
                 const card = document.createElement('a');
@@ -274,8 +289,23 @@
             currentFilter = filterType;
             
             // Update active state in UI
-            document.querySelectorAll('.filter-btn').forEach(btn => {
+            document.querySelectorAll('#filter-group .filter-btn').forEach(btn => {
                 if (btn.getAttribute('data-filter') === filterType) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+            
+            renderMindmaps();
+        }
+
+        function setDashboardSort(sortType) {
+            currentSort = sortType;
+            
+            // Update active state in UI
+            document.querySelectorAll('#sort-group .filter-btn').forEach(btn => {
+                if (btn.getAttribute('data-sort') === sortType) {
                     btn.classList.add('active');
                 } else {
                     btn.classList.remove('active');
