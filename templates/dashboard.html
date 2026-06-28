@@ -173,6 +173,26 @@
         </div>
     </div>
 
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay" id="delete-modal">
+        <div class="modal-box">
+            <button class="modal-close" onclick="closeDeleteModal()">×</button>
+            <h2 style="font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 1.5rem; margin-bottom: 0.75rem; color: #ffffff;">Delete Mindmap</h2>
+            <p id="delete-modal-text" style="color: var(--text-dim); font-size: 0.95rem; line-height: 1.5; margin-bottom: 2rem; font-family: 'Inter', sans-serif;"></p>
+            
+            <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+                <button class="logout-btn" onclick="closeDeleteModal()" style="padding: 0.6rem 1.5rem; background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: var(--text-dim); border-radius: 99px; cursor: pointer; font-size: 0.85rem; font-weight: 500; transition: all 0.2s;">Cancel</button>
+                <button id="confirm-delete-btn" style="background: #ef4444; color: #ffffff; border: none; padding: 0.6rem 1.5rem; border-radius: 99px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: opacity 0.2s;" onclick="executeSoftDelete()" onmouseover="this.style.opacity=0.9" onmouseout="this.style.opacity=1">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Undo Deletion Toast -->
+    <div id="undo-toast" class="undo-toast">
+        <span id="undo-toast-text">Deleting...</span>
+        <button id="undo-btn" class="undo-btn" onclick="undoDelete()">Undo</button>
+    </div>
+
     <script>
         let allMindmaps = [];
         let currentFilter = 'all';
@@ -333,19 +353,131 @@
             dropdown.classList.toggle('active');
         }
 
-        async function deleteMindmap(id, event) {
+        let currentDeleteId = null;
+        let currentDeleteTitle = null;
+        let pendingDelete = null; // { id: string, title: string, timeoutId: number, intervalId: number, originalMap: object, originalIndex: number }
+
+        function deleteMindmap(id, event) {
             event.preventDefault();
             event.stopPropagation();
             
-            if(!confirm("Are you sure you want to delete this mindmap? This cannot be undone.")) return;
+            // Close dropdown menu
+            document.querySelectorAll('.card-menu-dropdown').forEach(d => d.classList.remove('active'));
+
+            const map = allMindmaps.find(m => m.id === id);
+            if (!map) return;
+
+            openDeleteModal(id, map.title);
+        }
+
+        function openDeleteModal(id, title) {
+            currentDeleteId = id;
+            currentDeleteTitle = title;
+            document.getElementById('delete-modal-text').innerHTML = `Are you sure you want to delete <strong>'${escapeHtml(title)}'</strong>? This will permanently remove all nodes, notes, and chat history.`;
+            document.getElementById('delete-modal').classList.add('active');
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('delete-modal').classList.remove('active');
+            currentDeleteId = null;
+            currentDeleteTitle = null;
+        }
+
+        function executeSoftDelete() {
+            const id = currentDeleteId;
+            const title = currentDeleteTitle;
+            closeDeleteModal();
+
+            // If there's already a pending deletion, finalize it immediately
+            if (pendingDelete) {
+                finalizeHardDelete(pendingDelete.id);
+            }
+
+            // Find the item to soft-delete
+            const mapIndex = allMindmaps.findIndex(m => m.id === id);
+            if (mapIndex === -1) return;
+
+            const originalMap = allMindmaps[mapIndex];
             
+            // Remove from local memory
+            allMindmaps.splice(mapIndex, 1);
+            renderMindmaps();
+
+            let timeLeft = 10;
+            const toast = document.getElementById('undo-toast');
+            const toastText = document.getElementById('undo-toast-text');
+            
+            toastText.innerHTML = `Deleting <strong>'${escapeHtml(title)}'</strong> in ${timeLeft}s...`;
+            toast.classList.add('active');
+
+            const intervalId = setInterval(() => {
+                timeLeft--;
+                if (timeLeft > 0) {
+                    toastText.innerHTML = `Deleting <strong>'${escapeHtml(title)}'</strong> in ${timeLeft}s...`;
+                } else {
+                    clearInterval(intervalId);
+                }
+            }, 1000);
+
+            const timeoutId = setTimeout(() => {
+                clearInterval(intervalId);
+                toast.classList.remove('active');
+                finalizeHardDelete(id);
+                pendingDelete = null;
+            }, 10000);
+
+            pendingDelete = {
+                id: id,
+                title: title,
+                timeoutId: timeoutId,
+                intervalId: intervalId,
+                originalMap: originalMap,
+                originalIndex: mapIndex
+            };
+        }
+
+        function undoDelete() {
+            if (!pendingDelete) return;
+
+            // Clear timers
+            clearTimeout(pendingDelete.timeoutId);
+            clearInterval(pendingDelete.intervalId);
+
+            // Restore in memory
+            allMindmaps.splice(pendingDelete.originalIndex, 0, pendingDelete.originalMap);
+            renderMindmaps();
+
+            // Hide toast and reset
+            const toast = document.getElementById('undo-toast');
+            toast.classList.remove('active');
+            
+            pendingDelete = null;
+            showTemporaryToast("Deletion cancelled");
+        }
+
+        async function finalizeHardDelete(id) {
             try {
                 const res = await fetch(`/api/delete_mindmap/${id}`, { method: 'DELETE' });
                 if(!res.ok) throw new Error("Failed to delete");
-                loadMaps(); // Reload the grid
             } catch(e) {
-                alert("Error deleting mindmap: " + e.message);
+                console.error("Error hard-deleting:", e);
+                alert("Failed to delete mindmap: " + e.message);
+                loadMaps(); // Reload complete list from server
             }
+        }
+
+        function showTemporaryToast(message) {
+            let toast = document.getElementById('info-toast');
+            if (!toast) {
+                const html = `<div id="info-toast" class="undo-toast" style="bottom: 2.5rem; background: rgba(20,20,22,0.95); border: 1px solid var(--border); transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;"><span id="info-toast-text"></span></div>`;
+                document.body.insertAdjacentHTML('beforeend', html);
+                toast = document.getElementById('info-toast');
+            }
+            document.getElementById('info-toast-text').textContent = message;
+            toast.classList.add('active');
+            setTimeout(() => {
+                toast.classList.remove('active');
+            }, 3000);
         }
 
         let currentRenameId = null;
