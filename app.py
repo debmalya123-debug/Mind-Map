@@ -1,4 +1,5 @@
 import os
+import secrets
 import json
 import re
 import requests
@@ -58,6 +59,19 @@ def unauthorized():
         status=401,
         mimetype='text/html'
     )
+
+@app.before_request
+def ensure_csrf_token():
+    if 'csrf_token' not in session:
+        session['csrf_token'] = secrets.token_hex(32)
+
+@app.before_request
+def csrf_protect():
+    if request.method in ["POST", "PUT", "DELETE"]:
+        token = request.headers.get("X-CSRF-Token")
+        session_token = session.get("csrf_token")
+        if not session_token or token != session_token:
+            return jsonify({"error": "CSRF token missing or invalid."}), 400
 
 # --- Database Models ---
 class User(UserMixin, db.Model):
@@ -380,6 +394,7 @@ def generate_youtube_mindmap():
     return Response(stream_with_context(generate()), mimetype='text/event-stream')
 
 @app.route('/generate_mindmap', methods=['POST'])
+@login_required
 def generate_mindmap():
     if not client:
         return jsonify({"error": "Client not initialized. Check API Key."}), 500
@@ -460,6 +475,7 @@ def generate_mindmap():
     return jsonify({"error": "All models failed to generate mind map."}), 500
 
 @app.route('/node_query', methods=['POST'])
+@login_required
 def node_query():
     if not client:
         return jsonify({"error": "Client not initialized"}), 500
@@ -507,6 +523,7 @@ def node_query():
     return jsonify({"error": "All models failed to generate response."}), 500
 
 @app.route('/generate_note', methods=['POST', 'GET']) # Allow GET for easier debug in browser if needed, but primarily POST
+@login_required
 def generate_note():
     if request.method == 'GET':
         return jsonify({"status": "Generate Note Endpoint Active"})
@@ -563,14 +580,22 @@ def generate_note():
     except Exception as e:
         print(f"Error generating note: {e}")
         traceback.print_exc()
-        return jsonify({'note': f"Error generating note: {str(e)}"}), 500
+        return jsonify({'note': "Error generating note. Please try again later.", 'error': "Internal Server Error"}), 500
 
 # --- Auth Routes ---
 @app.route('/api/signup', methods=['POST'])
 def signup():
     data = request.get_json()
-    email = data.get('email')
-    password = data.get('password')
+    email = data.get('email', '').strip()
+    password = data.get('password', '')
+    
+    email_regex = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+    if not email or not re.match(email_regex, email):
+        return jsonify({"error": "Invalid email format"}), 400
+        
+    if not password or len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters long"}), 400
+        
     if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already exists"}), 400
     user = User(email=email, password_hash=generate_password_hash(password))
@@ -712,6 +737,11 @@ def save_note():
     client_id = data.get('client_id')
     content = data.get('content')
     
+    # Check ownership
+    mm = Mindmap.query.filter_by(id=mindmap_id, user_id=current_user.id).first()
+    if not mm:
+        return jsonify({"error": "Unauthorized. Mindmap does not belong to you."}), 403
+        
     node = Node.query.filter_by(mindmap_id=mindmap_id, client_id=client_id).first()
     if not node: return jsonify({"error": "Node not found"}), 404
     
@@ -732,6 +762,11 @@ def get_note_db():
     mindmap_id = data.get('mindmap_id')
     client_id = data.get('client_id')
     
+    # Check ownership
+    mm = Mindmap.query.filter_by(id=mindmap_id, user_id=current_user.id).first()
+    if not mm:
+        return jsonify({"error": "Unauthorized. Mindmap does not belong to you."}), 403
+        
     node = Node.query.filter_by(mindmap_id=mindmap_id, client_id=client_id).first()
     if not node: return jsonify({"note": None})
     
@@ -749,6 +784,11 @@ def save_chat():
     role = data.get('role')  # 'user' or 'ai'
     content = data.get('content')
     
+    # Check ownership
+    mm = Mindmap.query.filter_by(id=mindmap_id, user_id=current_user.id).first()
+    if not mm:
+        return jsonify({"error": "Unauthorized. Mindmap does not belong to you."}), 403
+        
     node = Node.query.filter_by(mindmap_id=mindmap_id, client_id=client_id).first()
     if not node: return jsonify({"error": "Node not found"}), 404
     
@@ -768,6 +808,11 @@ def get_chat():
     mindmap_id = data.get('mindmap_id')
     client_id = data.get('client_id')
     
+    # Check ownership
+    mm = Mindmap.query.filter_by(id=mindmap_id, user_id=current_user.id).first()
+    if not mm:
+        return jsonify({"error": "Unauthorized. Mindmap does not belong to you."}), 403
+        
     node = Node.query.filter_by(mindmap_id=mindmap_id, client_id=client_id).first()
     if not node: return jsonify({"messages": []})
     
@@ -776,4 +821,6 @@ def get_chat():
     return jsonify({"messages": result})
 
 if __name__ == '__main__':
-    app.run("0.0.0.0", debug=True, port=5000)
+    is_debug = os.getenv("FLASK_DEBUG", "True").lower() in ("true", "1")
+    host = os.getenv("FLASK_RUN_HOST", "127.0.0.1")
+    app.run(host=host, debug=is_debug, port=5000)
