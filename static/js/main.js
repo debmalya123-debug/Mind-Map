@@ -375,21 +375,31 @@ document.addEventListener('DOMContentLoaded', () => {
         // Parse and render mermaid diagrams
         const codeElements = noteContent.querySelectorAll('pre code.language-mermaid');
         if (codeElements.length > 0 && window.mermaid) {
-            codeElements.forEach((el, index) => {
+            for (let index = 0; index < codeElements.length; index++) {
+                const el = codeElements[index];
                 const pre = el.parentElement;
                 const code = el.textContent.trim();
                 
                 const div = document.createElement('div');
                 div.className = 'mermaid';
-                div.id = `mermaid-${Date.now()}-${index}`;
-                div.textContent = code;
+                const id = `mermaid-render-${Date.now()}-${index}`;
+                div.id = id;
                 
                 pre.replaceWith(div);
-            });
-            try {
-                await mermaid.run();
-            } catch(e) {
-                console.error("Mermaid rendering error:", e);
+                
+                try {
+                    const { svg } = await mermaid.render(id + '-svg', code);
+                    div.innerHTML = svg;
+                } catch(e) {
+                    console.error("Mermaid rendering error on diagram " + index + ":", e);
+                    div.innerHTML = `<div style="color: #ef4444; font-size: 0.85rem; padding: 1rem; border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; background: rgba(239, 68, 68, 0.05); text-align: left; width: 100%;">
+                        <p style="font-weight: 600; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 6px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            Diagram Syntax Error
+                        </p>
+                        <p style="opacity: 0.8; font-size: 0.8rem; line-height: 1.4;">The flowchart diagram structure could not be parsed by the browser.</p>
+                    </div>`;
+                }
             }
         }
 
