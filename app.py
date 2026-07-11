@@ -854,5 +854,5 @@ def get_chat():
 
 if __name__ == '__main__':
     is_debug = os.getenv("FLASK_DEBUG", "True").lower() in ("true", "1")
-    host = os.getenv("FLASK_RUN_HOST", "127.0.0.1")
+    host = os.getenv("FLASK_RUN_HOST", "0.0.0.0")
     app.run(host=host, debug=is_debug, port=5000)

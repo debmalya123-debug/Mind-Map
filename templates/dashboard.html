@@ -375,12 +375,14 @@
             currentDeleteTitle = title;
             document.getElementById('delete-modal-text').innerHTML = `Are you sure you want to delete <strong>'${escapeHtml(title)}'</strong>? This will permanently remove all nodes, notes, and chat history.`;
             document.getElementById('delete-modal').classList.add('active');
+            document.body.style.overflow = 'hidden';
         }
 
         function closeDeleteModal() {
             document.getElementById('delete-modal').classList.remove('active');
             currentDeleteId = null;
             currentDeleteTitle = null;
+            document.body.style.overflow = '';
         }
 
         function executeSoftDelete() {
@@ -502,6 +504,7 @@
             currentRenameTitle = title;
             document.getElementById('rename-input').value = title;
             document.getElementById('rename-modal').classList.add('active');
+            document.body.style.overflow = 'hidden';
             
             // Focus input field after overlay transition
             setTimeout(() => {
@@ -513,6 +516,7 @@
             document.getElementById('rename-modal').classList.remove('active');
             currentRenameId = null;
             currentRenameTitle = "";
+            document.body.style.overflow = '';
         }
 
         async function submitRename() {
@@ -794,6 +798,7 @@
 
         function openCreateModal() {
             document.getElementById('create-modal').classList.add('active');
+            document.body.style.overflow = 'hidden';
             
             // Restore modal controls if hidden during previous run
             document.querySelector('#create-modal .modal-tabs').style.display = 'flex';
@@ -815,6 +820,7 @@
 
         function closeCreateModal() {
             document.getElementById('create-modal').classList.remove('active');
+            document.body.style.overflow = '';
         }
 
         function showUnavailableModal(message) {

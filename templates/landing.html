@@ -33,8 +33,15 @@
     </script>
 </head>
 <body>
-    <div class="ambient-glow"></div>
-    <div class="ambient-glow bottom"></div>
+    <!-- Custom Cursor Trail -->
+    <div class="cursor-dot" id="cursor-dot"></div>
+    <div class="cursor-trail" id="cursor-trail"></div>
+
+    <div class="glow-container">
+        <div class="ambient-glow"></div>
+        <div class="ambient-glow bottom"></div>
+    </div>
+
 
     <nav class="navbar" id="navbar">
         <div class="logo">
@@ -75,16 +82,78 @@
             <a href="/dashboard" class="btn-primary">Open App ↗</a>
             <a href="#features" class="btn-outline">Discover More</a>
         </div>
+
+        <div class="hero-graphic reveal">
+            <div class="card-glow-overlay"></div>
+            <div class="preview-card">
+                <div class="preview-header">
+                    <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+                    <span class="preview-title">mindmap_synthesis_model.json</span>
+                </div>
+                <div class="preview-body">
+                    <svg viewBox="0 0 800 400" class="svg-flow">
+                        <!-- Connecting curves -->
+                        <path d="M 120 200 Q 260 100 400 100" class="flow-line line-1" />
+                        <path d="M 120 200 Q 260 200 400 200" class="flow-line line-2" />
+                        <path d="M 120 200 Q 260 300 400 300" class="flow-line line-3" />
+                        
+                        <path d="M 400 100 Q 520 60 640 60" class="flow-line sub-line-1" />
+                        <path d="M 400 100 Q 520 140 640 140" class="flow-line sub-line-2" />
+                        <path d="M 400 300 Q 520 260 640 260" class="flow-line sub-line-3" />
+                        <path d="M 400 300 Q 520 340 640 340" class="flow-line sub-line-4" />
+
+                        <!-- Nodes -->
+                        <!-- Root Node -->
+                        <g class="flow-node root-node" transform="translate(120, 200)">
+                            <rect x="-80" y="-22" width="160" height="44" rx="22" />
+                            <text dy="5" text-anchor="middle">Quantum Physics</text>
+                        </g>
+
+                        <!-- Level 1 Nodes -->
+                        <g class="flow-node level-1" transform="translate(400, 100)">
+                            <rect x="-70" y="-20" width="140" height="40" rx="10" />
+                            <text dy="5" text-anchor="middle">Wave Function</text>
+                        </g>
+                        <g class="flow-node level-1" transform="translate(400, 200)">
+                            <rect x="-70" y="-20" width="140" height="40" rx="10" />
+                            <text dy="5" text-anchor="middle">Schrodinger Eq.</text>
+                        </g>
+                        <g class="flow-node level-1" transform="translate(400, 300)">
+                            <rect x="-70" y="-20" width="140" height="40" rx="10" />
+                            <text dy="5" text-anchor="middle">Quantum States</text>
+                        </g>
+
+                        <!-- Level 2 Nodes -->
+                        <g class="flow-node level-2" transform="translate(640, 60)">
+                            <rect x="-60" y="-18" width="120" height="36" rx="6" />
+                            <text dy="4" text-anchor="middle">Superposition</text>
+                        </g>
+                        <g class="flow-node level-2" transform="translate(640, 140)">
+                            <rect x="-60" y="-18" width="120" height="36" rx="6" />
+                            <text dy="4" text-anchor="middle">Probability</text>
+                        </g>
+                        <g class="flow-node level-2" transform="translate(640, 260)">
+                            <rect x="-60" y="-18" width="120" height="36" rx="6" />
+                            <text dy="4" text-anchor="middle">Eigenvalues</text>
+                        </g>
+                        <g class="flow-node level-2" transform="translate(640, 340)">
+                            <rect x="-60" y="-18" width="120" height="36" rx="6" />
+                            <text dy="4" text-anchor="middle">Dirac Notation</text>
+                        </g>
+                    </svg>
+                </div>
+            </div>
+        </div>
     </header>
 
     <section id="features" class="features">
-        <div class="section-header">
+        <div class="section-header reveal">
             <h2>Meet Cognitive Insights</h2>
             <p>Save your precious time. MindMap.AI replaces the lengthy process of manual note-taking and concept mapping.</p>
         </div>
 
         <div class="grid">
-            <div class="card large">
+            <div class="card large reveal">
                 <div class="card-content">
                     <h3>MindMap Generation</h3>
                     <p style="margin-bottom: 2rem;">Transform any lengthy syllabus or dense block of text into a clean, hierarchical mind map. Let the AI seamlessly organize your learning journey into Main Topics, Sub Topics, and key Details in seconds.</p>
@@ -110,7 +179,7 @@
                 </div>
             </div>
 
-            <div class="card">
+            <div class="card reveal">
                 <h3>Notes Generation</h3>
                 <p>Click on any node to instantly generate comprehensive markdown study notes, including beautifully formatted LaTeX equations.</p>
                 <div class="card-graphic" style="min-height:120px; margin-top: 2rem;">
@@ -125,7 +194,7 @@
                 </div>
             </div>
 
-            <div class="card">
+            <div class="card reveal">
                 <h3>Ask AI</h3>
                 <p>Have a question about a specific sub-topic? The AI understands exactly where you are in the syllabus and provides context-aware answers.</p>
                 <div class="card-graphic" style="min-height:120px; margin-top: 2rem; align-items:flex-start; justify-content:flex-start;">
@@ -214,10 +283,14 @@
         function openAuthModal() {
             modal.classList.add('active');
             errorDiv.style.display = 'none';
+            document.documentElement.classList.add('modal-open');
+            document.body.classList.add('modal-open');
         }
 
         function closeAuthModal() {
             modal.classList.remove('active');
+            document.documentElement.classList.remove('modal-open');
+            document.body.classList.remove('modal-open');
         }
 
         function toggleAuthMode() {
@@ -303,6 +376,46 @@
             errorDiv.style.color = 'var(--accent)'; // Highlighted info color
             errorDiv.style.display = 'block';
         }
+
+        // Scroll Reveal Trigger (Intersection Observer)
+        const revealElements = document.querySelectorAll('.reveal');
+        const revealObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('active');
+                }
+            });
+        }, { threshold: 0.1 });
+
+        revealElements.forEach(el => revealObserver.observe(el));
+
+        // Custom Cursor Trail Script (Lag inertia)
+        const dot = document.getElementById('cursor-dot');
+        const trail = document.getElementById('cursor-trail');
+        let mX = 0, mY = 0;
+        let dX = 0, dY = 0;
+        let tX = 0, tY = 0;
+
+        window.addEventListener('mousemove', (e) => {
+            mX = e.clientX;
+            mY = e.clientY;
+        });
+
+        function animateCursor() {
+            dX += (mX - dX) * 0.3;
+            dY += (mY - dY) * 0.3;
+            tX += (mX - tX) * 0.1;
+            tY += (mY - tY) * 0.1;
+
+            if (dot && trail) {
+                dot.style.left = dX + 'px';
+                dot.style.top = dY + 'px';
+                trail.style.left = tX + 'px';
+                trail.style.top = tY + 'px';
+            }
+            requestAnimationFrame(animateCursor);
+        }
+        animateCursor();
     </script>
 </body>
 </html>
