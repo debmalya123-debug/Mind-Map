@@ -1,6 +1,15 @@
 document.addEventListener('DOMContentLoaded', () => {
     console.log("Mind Map App: main.js v13 (mobile)");
 
+    // Initialize Mermaid
+    if (window.mermaid) {
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            securityLevel: 'loose'
+        });
+    }
+
     // --- Mobile Detection ---
     const isMobile = () => window.innerWidth <= 768;
     const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
@@ -360,8 +369,30 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>`;
     }
 
-    function renderNote(markdown) {
+    async function renderNote(markdown) {
         noteContent.innerHTML = marked.parse(markdown);
+        
+        // Parse and render mermaid diagrams
+        const codeElements = noteContent.querySelectorAll('pre code.language-mermaid');
+        if (codeElements.length > 0 && window.mermaid) {
+            codeElements.forEach((el, index) => {
+                const pre = el.parentElement;
+                const code = el.textContent.trim();
+                
+                const div = document.createElement('div');
+                div.className = 'mermaid';
+                div.id = `mermaid-${Date.now()}-${index}`;
+                div.textContent = code;
+                
+                pre.replaceWith(div);
+            });
+            try {
+                await mermaid.run();
+            } catch(e) {
+                console.error("Mermaid rendering error:", e);
+            }
+        }
+
         if (window.MathJax && MathJax.typesetPromise) {
             MathJax.typesetPromise([noteContent]).catch((err) => console.error('MathJax error:', err));
         }

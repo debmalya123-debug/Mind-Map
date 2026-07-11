@@ -78,6 +78,27 @@ body {
     border-color: rgba(255,255,255,0.2);
 }
 
+.settings-btn {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 0.6rem 1.2rem;
+    border-radius: 99px;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    backdrop-filter: blur(10px);
+    touch-action: manipulation;
+}
+
+.settings-btn:hover {
+    background: rgba(255,255,255,0.1);
+    color: var(--text);
+    border-color: rgba(255,255,255,0.2);
+}
+
 /* Main Content Layout */
 .dash-main {
     max-width: 1400px;

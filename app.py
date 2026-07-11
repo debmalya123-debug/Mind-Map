@@ -79,6 +79,8 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    include_images = db.Column(db.Boolean, default=False, nullable=False)
+    include_mermaid = db.Column(db.Boolean, default=False, nullable=False)
 
 class Mindmap(db.Model):
     id = db.Column(db.String, primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -157,6 +159,30 @@ with app.app_context():
         except Exception as migration_err:
             db.session.rollback()
             print(f"Failed to migrate node table: {migration_err}")
+
+    try:
+        db.session.execute(db.text("SELECT include_images FROM \"user\" LIMIT 1"))
+    except Exception:
+        db.session.rollback()
+        try:
+            db.session.execute(db.text("ALTER TABLE \"user\" ADD COLUMN include_images BOOLEAN DEFAULT FALSE"))
+            db.session.commit()
+            print("Successfully migrated user table: added include_images column.")
+        except Exception as migration_err:
+            db.session.rollback()
+            print(f"Failed to migrate user table include_images: {migration_err}")
+
+    try:
+        db.session.execute(db.text("SELECT include_mermaid FROM \"user\" LIMIT 1"))
+    except Exception:
+        db.session.rollback()
+        try:
+            db.session.execute(db.text("ALTER TABLE \"user\" ADD COLUMN include_mermaid BOOLEAN DEFAULT FALSE"))
+            db.session.commit()
+            print("Successfully migrated user table: added include_mermaid column.")
+        except Exception as migration_err:
+            db.session.rollback()
+            print(f"Failed to migrate user table include_mermaid: {migration_err}")
 
 # Configure Gemini API
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -558,6 +584,9 @@ def generate_note():
         topic = data.get('topic', '')
         context = data.get('context', '')
         
+        include_images = current_user.include_images
+        include_mermaid = current_user.include_mermaid
+        
         prompt = f"""
         Create a comprehensive study note for the topic: '{topic}'.
         Context from mind map: {context}
@@ -568,9 +597,33 @@ def generate_note():
         3.  **Detailed Explanation**: In-depth analysis.
         4.  **Tables**: Compare/Contrast or data tables if applicable.
         5.  **Equations/Math**: Use LaTeX formatting (e.g., $E=mc^2$) where relevant.
-        
-        Make it educational, structured, and easy to read.
         """
+        
+        if include_mermaid:
+            prompt += """
+        6.  **Illustrative Diagram (Mermaid.js)**: You MUST include exactly 1 text-based flowchart, sequence flow, cycles, or relational graph of the concepts using Mermaid.js syntax inside a fenced code block labeled `mermaid`. For example:
+            ```mermaid
+            graph TD
+                A[Concept A] --> B[Concept B]
+                B --> C[Concept C]
+            ```
+            Ensure the Mermaid diagram code is syntax-correct, matches dark backgrounds, and maps concept relationships.
+            """
+            
+        if include_images:
+            prompt += """
+        7.  **Illustrative Figure (Image)**: You MUST include exactly 1 high-resolution stock diagram matching the topic's category using the markdown syntax:
+            `![Alt Text](URL)`
+            Choose the most appropriate link from this list:
+            - Biology / DNA / Chemistry Structures: https://images.unsplash.com/photo-1530026405186-ed1ea0ac7a63?q=80&w=600&auto=format&fit=crop
+            - Physics / Circuitry / Lab Equipments: https://images.unsplash.com/photo-1507842217343-583bb7270b66?q=80&w=600&auto=format&fit=crop
+            - Software Systems / Programming Architecture: https://images.unsplash.com/photo-1517694712202-14dd9538aa97?q=80&w=600&auto=format&fit=crop
+            - Astronomy / Celestial orbits: https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=600&auto=format&fit=crop
+            - Mathematical Graphs / Geometry: https://images.unsplash.com/photo-1509228468518-180dd4864904?q=80&w=600&auto=format&fit=crop
+            - Economic / Business Charts: https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=600&auto=format&fit=crop
+            """
+
+        prompt += "\nMake it educational, structured, and easy to read."
         
         print(f"\n[DEBUG] Sending Prompt to Gemini:\n{prompt}\n[DEBUG] End Prompt\n")
 
@@ -678,6 +731,22 @@ def get_user():
     if current_user.is_authenticated:
         return jsonify({"email": current_user.email})
     return jsonify({"email": None})
+
+@app.route('/api/user/settings', methods=['GET', 'POST'])
+@login_required
+def user_settings():
+    if request.method == 'GET':
+        return jsonify({
+            "email": current_user.email,
+            "include_images": current_user.include_images,
+            "include_mermaid": current_user.include_mermaid
+        })
+    else:
+        data = request.get_json() or {}
+        current_user.include_images = bool(data.get('include_images', False))
+        current_user.include_mermaid = bool(data.get('include_mermaid', False))
+        db.session.commit()
+        return jsonify({"success": True})
 
 # --- Database Routes ---
 @app.route('/api/save_mindmap', methods=['POST'])

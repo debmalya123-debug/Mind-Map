@@ -597,6 +597,25 @@ label {
     font-style: italic;
 }
 
+.notes-card-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    margin: 1.2rem 0;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: block;
+}
+
+.notes-card-content .mermaid {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+    display: flex;
+    justify-content: center;
+}
+
 .notes-card-content table {
     width: 100%;
     border-collapse: collapse;
