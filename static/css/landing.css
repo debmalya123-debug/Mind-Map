@@ -16,6 +16,10 @@
     padding: 0;
 }
 
+html {
+    overflow-x: hidden;
+}
+
 body {
     font-family: 'Inter', sans-serif;
     background-color: var(--bg);
@@ -23,6 +27,7 @@ body {
     line-height: 1.5;
     overflow-x: hidden;
     position: relative;
+    -webkit-tap-highlight-color: transparent;
 }
 
 /* Background Ambient Glow */
@@ -50,7 +55,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 2rem 6rem;
+    padding: 1.5rem 4rem;
     position: fixed;
     top: 0;
     left: 0;
@@ -73,10 +78,105 @@ body {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    z-index: 101;
 }
 
 .logo span {
     color: var(--accent);
+}
+
+/* Hamburger Button */
+.hamburger {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    width: 40px;
+    height: 40px;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    padding: 8px;
+    z-index: 101;
+    transition: all 0.3s;
+}
+
+.hamburger span {
+    display: block;
+    width: 100%;
+    height: 2px;
+    background: var(--text);
+    border-radius: 2px;
+    transition: all 0.3s ease;
+    transform-origin: center;
+}
+
+.hamburger.active span:nth-child(1) {
+    transform: translateY(7px) rotate(45deg);
+}
+
+.hamburger.active span:nth-child(2) {
+    opacity: 0;
+    transform: scaleX(0);
+}
+
+.hamburger.active span:nth-child(3) {
+    transform: translateY(-7px) rotate(-45deg);
+}
+
+/* Mobile Nav Overlay */
+.mobile-nav-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    background: rgba(10, 10, 10, 0.98);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 1.5rem;
+    z-index: 99;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s ease;
+}
+
+.mobile-nav-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.mobile-nav-overlay a {
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 1.25rem;
+    font-weight: 500;
+    padding: 0.75rem 2rem;
+    transition: color 0.2s;
+}
+
+.mobile-nav-overlay a:hover,
+.mobile-nav-overlay a.active {
+    color: var(--text);
+}
+
+.mobile-nav-overlay .btn-primary {
+    margin-top: 0.5rem;
+    padding: 0.8rem 2rem;
+    font-size: 1rem;
+}
+
+.mobile-nav-divider {
+    width: 40px;
+    height: 1px;
+    background: var(--border);
+    margin: 0.5rem 0;
 }
 
 .nav-links {
@@ -128,6 +228,8 @@ body {
     font-size: 0.9rem;
     font-weight: 600;
     transition: background 0.2s, transform 0.2s;
+    display: inline-block;
+    text-align: center;
 }
 
 .btn-primary:hover {
@@ -198,6 +300,7 @@ body {
     color: var(--text-dim);
     max-width: 600px;
     margin-bottom: 2.5rem;
+    padding: 0 1rem;
 }
 
 .hero-cta {
@@ -378,6 +481,7 @@ body {
 footer {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     padding: 2rem 4rem;
     border-top: 1px solid var(--border);
     color: var(--text-dim);
@@ -457,6 +561,7 @@ footer {
     padding: 0.8rem;
     color: var(--text);
     outline: none;
+    font-size: 16px; /* Prevents iOS zoom on focus */
 }
 
 .modal-box input:focus {
@@ -473,6 +578,8 @@ footer {
     border-radius: 0.5rem;
     font-weight: 600;
     cursor: pointer;
+    font-size: 1rem;
+    touch-action: manipulation;
 }
 
 .modal-box .switch-mode {
@@ -510,4 +617,174 @@ footer {
 .btn-google:hover {
     background: #f8f9fa;
     box-shadow: 0 1px 3px rgba(60,64,67,0.3);
+}
+
+/* ==============================================
+   RESPONSIVE: TABLET (max-width: 1024px)
+   ============================================== */
+@media (max-width: 1024px) {
+    .navbar {
+        padding: 1.25rem 2rem;
+    }
+
+    .features {
+        padding: 6rem 2rem;
+    }
+
+    .card.large {
+        flex-direction: column;
+    }
+
+    .card.large .card-graphic {
+        min-height: 150px;
+    }
+
+    footer {
+        padding: 2rem;
+    }
+}
+
+/* ==============================================
+   RESPONSIVE: MOBILE (max-width: 768px)
+   ============================================== */
+@media (max-width: 768px) {
+    /* Navbar: hide desktop links, show hamburger */
+    .nav-links,
+    .nav-actions {
+        display: none !important;
+    }
+
+    .hamburger {
+        display: flex;
+    }
+
+    .mobile-nav-overlay {
+        display: flex;
+    }
+
+    .navbar {
+        padding: 1rem 1.5rem;
+    }
+
+    /* Hero section scaling */
+    .massive-logo {
+        font-size: 3.5rem;
+    }
+
+    .hero {
+        padding: 7rem 1.5rem 3rem;
+        min-height: auto;
+    }
+
+    .hero h1 {
+        font-size: 2.25rem;
+        max-width: 100%;
+    }
+
+    .hero p {
+        font-size: 0.95rem;
+        padding: 0;
+    }
+
+    .hero-badge {
+        font-size: 0.75rem;
+        padding: 0.35rem 0.8rem;
+    }
+
+    .hero-cta {
+        flex-direction: column;
+        width: 100%;
+        max-width: 280px;
+    }
+
+    .hero-cta .btn-primary,
+    .hero-cta .btn-outline {
+        width: 100%;
+        text-align: center;
+        padding: 0.75rem 1.5rem;
+    }
+
+    /* Features grid */
+    .features {
+        padding: 4rem 1.5rem;
+    }
+
+    .section-header h2 {
+        font-size: 1.75rem;
+    }
+
+    .section-header p {
+        font-size: 0.9rem;
+    }
+
+    .grid {
+        grid-template-columns: 1fr;
+    }
+
+    .card.large {
+        grid-column: span 1;
+        flex-direction: column;
+    }
+
+    .card {
+        padding: 1.5rem;
+    }
+
+    .card-graphic {
+        min-height: 120px;
+    }
+
+    /* Footer */
+    footer {
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+        padding: 1.5rem;
+    }
+
+    /* Modal */
+    .modal-box {
+        padding: 2rem 1.5rem;
+        margin: 1rem;
+    }
+
+    /* Ambient glow - reduce on mobile for perf */
+    .ambient-glow {
+        width: 400px;
+        height: 400px;
+        filter: blur(60px);
+    }
+}
+
+/* ==============================================
+   RESPONSIVE: SMALL MOBILE (max-width: 480px)
+   ============================================== */
+@media (max-width: 480px) {
+    .massive-logo {
+        font-size: 2.75rem;
+    }
+
+    .hero h1 {
+        font-size: 1.75rem;
+    }
+
+    .hero p {
+        font-size: 0.9rem;
+    }
+
+    .section-header h2 {
+        font-size: 1.5rem;
+    }
+
+    .navbar {
+        padding: 0.75rem 1rem;
+    }
+
+    .card h3 {
+        font-size: 1.1rem;
+    }
+
+    .card p {
+        font-size: 0.85rem;
+    }
 }

@@ -1,5 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("Mind Map App: main.js v12");
+    console.log("Mind Map App: main.js v13 (mobile)");
+
+    // --- Mobile Detection ---
+    const isMobile = () => window.innerWidth <= 768;
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
     // --- DOM Elements ---
     const loading = document.getElementById('loading');
@@ -729,7 +733,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const rootNode = d3.stratify().id(d => d.id).parentId(d => d.parent)(data.nodes);
         rootNode.x0 = height / 2;
         rootNode.y0 = 0;
-        tree = d3.tree().nodeSize([80, 400]);
+        // Narrower spacing on mobile for better fit
+        const nodeSpacingX = isMobile() ? 60 : 80;
+        const nodeSpacingY = isMobile() ? 280 : 400;
+        tree = d3.tree().nodeSize([nodeSpacingX, nodeSpacingY]);
         root = rootNode;
         
         // Collapse everything down to the root initially
@@ -762,7 +769,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const fitBtn = document.getElementById('fit');
     if(fitBtn) fitBtn.onclick = () => fitToView(true);
 
-    window.addEventListener('resize', () => fitToView(false));
+    window.addEventListener('resize', () => {
+        fitToView(false);
+        // Update tree node spacing on orientation change
+        if (root && tree) {
+            const nodeSpacingX = isMobile() ? 60 : 80;
+            const nodeSpacingY = isMobile() ? 280 : 400;
+            tree = d3.tree().nodeSize([nodeSpacingX, nodeSpacingY]);
+        }
+    });
 
     // YouTube Player Minimize / Maximize toggle
     const playerContainer = document.getElementById('video-player-container');
@@ -787,7 +802,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const resizeHandle = document.getElementById('player-resize-handle');
 
     if (playerContainer && playerHeader) {
-        // Dragging Logic
+        // Dragging Logic (mouse + touch)
         let isDragging = false;
         let startX, startY, startLeft, startTop;
 
@@ -798,127 +813,206 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        playerHeader.style.cursor = 'grab';
-
-        playerHeader.addEventListener('mousedown', (e) => {
-            if (e.button !== 0 || e.target.closest('.player-ctrl-btn')) return;
-            
+        // Skip drag on mobile — player is full-width fixed
+        const startDrag = (clientX, clientY) => {
+            if (isMobile()) return;
             isDragging = true;
             playerHeader.style.cursor = 'grabbing';
             disableIframePointerEvents(true);
-            
-            startX = e.clientX;
-            startY = e.clientY;
-            
+            startX = clientX;
+            startY = clientY;
             const rect = playerContainer.getBoundingClientRect();
             const parentRect = playerContainer.parentElement.getBoundingClientRect();
             startLeft = rect.left - parentRect.left;
             startTop = rect.top - parentRect.top;
-            
-            e.preventDefault();
-        });
+        };
 
-        document.addEventListener('mousemove', (e) => {
+        const moveDrag = (clientX, clientY) => {
             if (!isDragging) return;
-            
-            const dx = e.clientX - startX;
-            const dy = e.clientY - startY;
-            
+            const dx = clientX - startX;
+            const dy = clientY - startY;
             let newLeft = startLeft + dx;
             let newTop = startTop + dy;
-            
             const parent = playerContainer.parentElement;
             if (parent) {
                 const parentRect = parent.getBoundingClientRect();
                 const containerRect = playerContainer.getBoundingClientRect();
-                
                 const maxLeft = parentRect.width - containerRect.width;
                 const maxTop = parentRect.height - containerRect.height;
-                
                 newLeft = Math.max(0, Math.min(newLeft, maxLeft));
                 newTop = Math.max(0, Math.min(newTop, maxTop));
             }
-            
             playerContainer.style.left = `${newLeft}px`;
             playerContainer.style.top = `${newTop}px`;
             playerContainer.style.right = 'auto';
             playerContainer.style.bottom = 'auto';
-        });
+        };
 
-        document.addEventListener('mouseup', () => {
+        const endDrag = () => {
             if (isDragging) {
                 isDragging = false;
-                playerHeader.style.cursor = 'grab';
+                playerHeader.style.cursor = isMobile() ? 'default' : 'grab';
                 disableIframePointerEvents(false);
             }
+        };
+
+        playerHeader.style.cursor = isMobile() ? 'default' : 'grab';
+
+        // Mouse events
+        playerHeader.addEventListener('mousedown', (e) => {
+            if (e.button !== 0 || e.target.closest('.player-ctrl-btn')) return;
+            startDrag(e.clientX, e.clientY);
+            e.preventDefault();
         });
+        document.addEventListener('mousemove', (e) => moveDrag(e.clientX, e.clientY));
+        document.addEventListener('mouseup', endDrag);
+
+        // Touch events
+        playerHeader.addEventListener('touchstart', (e) => {
+            if (e.target.closest('.player-ctrl-btn')) return;
+            const touch = e.touches[0];
+            startDrag(touch.clientX, touch.clientY);
+        }, { passive: true });
+        document.addEventListener('touchmove', (e) => {
+            if (isDragging) {
+                const touch = e.touches[0];
+                moveDrag(touch.clientX, touch.clientY);
+            }
+        }, { passive: true });
+        document.addEventListener('touchend', endDrag);
     }
 
     if (playerContainer && resizeHandle) {
-        // Resizing Logic
+        // Resizing Logic (mouse + touch) — disabled on mobile
         let isResizing = false;
         let startWidth, startHeight, startMouseX, startMouseY;
         let startOriginX, startOriginY, startDistance;
 
-        const disableIframePointerEvents = (disable) => {
+        const disableIframePointerEventsResize = (disable) => {
             const iframe = playerContainer.querySelector('iframe');
             if (iframe) {
                 iframe.style.pointerEvents = disable ? 'none' : 'auto';
             }
         };
 
-        resizeHandle.addEventListener('mousedown', (e) => {
-            if (e.button !== 0) return;
+        const startResize = (clientX, clientY) => {
+            if (isMobile()) return;
             if (playerContainer.classList.contains('minimized')) return;
-
             isResizing = true;
             startWidth = playerContainer.clientWidth;
-            startHeight = playerContainer.clientHeight;
-            startMouseX = e.clientX;
-            startMouseY = e.clientY;
-            
+            startMouseX = clientX;
+            startMouseY = clientY;
             const rect = playerContainer.getBoundingClientRect();
             startOriginX = rect.left;
             startOriginY = rect.top;
-            
-            // Calculate starting radial distance from top-left corner
             startDistance = Math.sqrt(
-                Math.pow(startMouseX - startOriginX, 2) + 
+                Math.pow(startMouseX - startOriginX, 2) +
                 Math.pow(startMouseY - startOriginY, 2)
             );
-            
-            disableIframePointerEvents(true);
-            e.preventDefault();
-            e.stopPropagation();
-        });
+            disableIframePointerEventsResize(true);
+        };
 
-        document.addEventListener('mousemove', (e) => {
+        const moveResize = (clientX, clientY) => {
             if (!isResizing) return;
-            
-            // Calculate current radial distance from top-left corner
             const currentDistance = Math.sqrt(
-                Math.pow(e.clientX - startOriginX, 2) + 
-                Math.pow(e.clientY - startOriginY, 2)
+                Math.pow(clientX - startOriginX, 2) +
+                Math.pow(clientY - startOriginY, 2)
             );
-            
             const scale = currentDistance / startDistance;
             const newWidth = Math.max(265, Math.min(600, startWidth * scale));
-            
             playerContainer.style.width = `${newWidth}px`;
-            
             const iframeWrapper = document.getElementById('player-iframe-wrapper');
             if (iframeWrapper) {
                 iframeWrapper.style.paddingTop = '0';
                 iframeWrapper.style.height = `${(newWidth * 9) / 16}px`;
             }
-        });
+        };
 
-        document.addEventListener('mouseup', () => {
+        const endResize = () => {
             if (isResizing) {
                 isResizing = false;
-                disableIframePointerEvents(false);
+                disableIframePointerEventsResize(false);
             }
+        };
+
+        // Mouse events
+        resizeHandle.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            startResize(e.clientX, e.clientY);
+            e.preventDefault();
+            e.stopPropagation();
         });
+        document.addEventListener('mousemove', (e) => moveResize(e.clientX, e.clientY));
+        document.addEventListener('mouseup', endResize);
+
+        // Touch events
+        resizeHandle.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            startResize(touch.clientX, touch.clientY);
+            e.preventDefault();
+            e.stopPropagation();
+        }, { passive: false });
+        document.addEventListener('touchmove', (e) => {
+            if (isResizing) {
+                const touch = e.touches[0];
+                moveResize(touch.clientX, touch.clientY);
+            }
+        }, { passive: true });
+        document.addEventListener('touchend', endResize);
+    }
+
+    // ==============================================
+    // MOBILE: Notes Card Swipe-to-Close
+    // ==============================================
+    const notesSwipeHandle = document.getElementById('notes-swipe-handle');
+    if (notesCard && notesSwipeHandle) {
+        let swipeStartY = 0;
+        let swipeCurrentY = 0;
+        let isSwiping = false;
+
+        const onSwipeStart = (e) => {
+            if (!isMobile()) return;
+            const touch = e.touches[0];
+            swipeStartY = touch.clientY;
+            swipeCurrentY = touch.clientY;
+            isSwiping = true;
+            notesCard.style.transition = 'none';
+        };
+
+        const onSwipeMove = (e) => {
+            if (!isSwiping) return;
+            const touch = e.touches[0];
+            swipeCurrentY = touch.clientY;
+            const dy = swipeCurrentY - swipeStartY;
+            if (dy > 0) {
+                // Only allow dragging down
+                notesCard.style.transform = `translateY(${dy}px)`;
+            }
+        };
+
+        const onSwipeEnd = () => {
+            if (!isSwiping) return;
+            isSwiping = false;
+            notesCard.style.transition = '';
+            const dy = swipeCurrentY - swipeStartY;
+            if (dy > 100) {
+                // Threshold met — close the card
+                notesCard.classList.add('hidden-card');
+            }
+            notesCard.style.transform = '';
+        };
+
+        notesSwipeHandle.addEventListener('touchstart', onSwipeStart, { passive: true });
+        notesSwipeHandle.addEventListener('touchmove', onSwipeMove, { passive: true });
+        notesSwipeHandle.addEventListener('touchend', onSwipeEnd);
+
+        // Also allow swiping from the header
+        const notesHeader = notesCard.querySelector('.notes-card-header');
+        if (notesHeader) {
+            notesHeader.addEventListener('touchstart', onSwipeStart, { passive: true });
+            notesHeader.addEventListener('touchmove', onSwipeMove, { passive: true });
+            notesHeader.addEventListener('touchend', onSwipeEnd);
+        }
     }
 
     // --- Onboarding Logic ---

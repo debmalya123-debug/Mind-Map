@@ -40,12 +40,22 @@
         <div class="logo">
             MindMap.AI
         </div>
+        <button class="hamburger" id="hamburger-btn" onclick="toggleMobileNav()" aria-label="Toggle menu">
+            <span></span><span></span><span></span>
+        </button>
         <div class="nav-links">
             <a href="#" class="active">Home</a>
             <a href="#features">Features</a>
         </div>
         <div class="nav-actions">
             <a href="#" class="login">Sign In</a>
+            <a href="/dashboard" class="btn-primary">Launch App</a>
+        </div>
+        <div class="mobile-nav-overlay" id="mobile-nav">
+            <a href="#" class="active" onclick="toggleMobileNav()">Home</a>
+            <a href="#features" onclick="toggleMobileNav()">Features</a>
+            <div class="mobile-nav-divider"></div>
+            <a href="#" class="login" onclick="event.preventDefault(); toggleMobileNav(); openAuthModal();">Sign In</a>
             <a href="/dashboard" class="btn-primary">Launch App</a>
         </div>
     </nav>
@@ -183,6 +193,15 @@
                 nav.classList.remove('scrolled');
             }
         });
+
+        // Mobile Nav Toggle
+        function toggleMobileNav() {
+            const nav = document.getElementById('mobile-nav');
+            const btn = document.getElementById('hamburger-btn');
+            const isOpen = nav.classList.toggle('active');
+            btn.classList.toggle('active', isOpen);
+            document.body.style.overflow = isOpen ? 'hidden' : '';
+        }
 
         // Auth Logic
         let isLoginMode = true;

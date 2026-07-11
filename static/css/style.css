@@ -27,9 +27,12 @@ body {
     background: var(--bg-dark);
     color: var(--text);
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
 }
 
 /* Background Gradients/Effects - Subtle */
@@ -50,6 +53,7 @@ body::before {
     display: flex;
     flex-direction: column;
     height: 100vh;
+    height: 100dvh;
     width: 100vw;
     background: var(--bg-dark);
 }
@@ -64,6 +68,7 @@ body::before {
     backdrop-filter: blur(16px);
     border-bottom: 1px solid rgba(255,255,255,0.06);
     z-index: 50;
+    flex-shrink: 0;
 }
 
 .btn-back {
@@ -79,6 +84,7 @@ body::before {
     transition: all 0.2s;
     background: rgba(255,255,255,0.03);
     flex-shrink: 0;
+    touch-action: manipulation;
 }
 
 .btn-back:hover {
@@ -92,6 +98,9 @@ body::before {
     flex-direction: column;
     align-items: center;
     gap: 1px;
+    min-width: 0;
+    flex: 1;
+    padding: 0 12px;
 }
 
 .map-title {
@@ -152,15 +161,15 @@ label {
 }
 
 /* Input Fields */
-.glass-input, .modern-input { /* Keeping glass-input mainly for JS compatibility if referenced */
+.glass-input, .modern-input {
     width: 100%;
-    background: #171717; /* Neutral 900 */
+    background: #171717;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     padding: 12px 16px;
     color: var(--text);
     font-family: inherit;
-    font-size: 0.95rem;
+    font-size: 16px; /* Prevents iOS zoom */
     resize: none;
     outline: none;
     transition: all 0.2s ease;
@@ -172,7 +181,7 @@ label {
     background: #1a1a1a;
 }
 .glass-input::placeholder {
-    color: #52525b; /* Zinc 600 */
+    color: #52525b;
 }
 
 /* Results Area */
@@ -189,7 +198,7 @@ label {
     width: 100%;
     padding: 12px 24px;
     border: none;
-    border-radius: 9999px; /* Pill shape */
+    border-radius: 9999px;
     font-weight: 600;
     font-size: 0.95rem;
     cursor: pointer;
@@ -200,6 +209,7 @@ label {
     align-items: center;
     gap: 8px;
     letter-spacing: -0.01em;
+    touch-action: manipulation;
 }
 
 .btn-primary {
@@ -229,6 +239,7 @@ label {
     justify-content: center;
     font-size: 1.2rem;
     box-shadow: var(--shadow-sm);
+    touch-action: manipulation;
 }
 
 .btn-icon:hover {
@@ -266,6 +277,7 @@ label {
     flex: 1;
     width: 100%;
     cursor: grab;
+    touch-action: none; /* Let D3 handle all touch */
 }
 #viz-container:active { cursor: grabbing; }
 
@@ -311,6 +323,7 @@ label {
     justify-content: center;
     cursor: pointer;
     transition: all 0.2s;
+    touch-action: manipulation;
 }
 
 .ctrl-btn:hover {
@@ -381,10 +394,12 @@ label {
 .notes-card {
     position: fixed;
     top: 50%;
-    right: 32px;
+    right: 24px;
     transform: translateY(-50%) scale(1);
     width: 480px;
+    max-width: calc(100vw - 48px);
     height: 94vh;
+    height: 94dvh;
     background: #0c0c0c;
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 20px;
@@ -409,6 +424,7 @@ label {
     padding: 20px 24px 16px;
     background: linear-gradient(135deg, rgba(204,255,0,0.06) 0%, transparent 100%);
     border-bottom: 1px solid rgba(255,255,255,0.06);
+    flex-shrink: 0;
 }
 
 .notes-card-info {
@@ -443,8 +459,8 @@ label {
 }
 
 .card-close-btn {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 8px;
@@ -456,6 +472,7 @@ label {
     transition: all 0.2s;
     flex-shrink: 0;
     margin-left: 12px;
+    touch-action: manipulation;
 }
 
 .card-close-btn:hover {
@@ -465,6 +482,7 @@ label {
 
 .notes-card-actions {
     padding: 16px 24px 0;
+    flex-shrink: 0;
 }
 
 .generate-btn {
@@ -484,6 +502,8 @@ label {
     gap: 8px;
     transition: all 0.25s;
     box-shadow: 0 2px 12px rgba(204, 255, 0, 0.15);
+    touch-action: manipulation;
+    min-height: 44px;
 }
 
 .generate-btn:hover {
@@ -506,6 +526,7 @@ label {
     font-size: 0.92rem;
     line-height: 1.75;
     color: #d4d4d8;
+    -webkit-overflow-scrolling: touch;
 }
 
 .notes-empty {
@@ -612,6 +633,7 @@ label {
     transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     position: relative;
     z-index: 201;
+    touch-action: manipulation;
 }
 
 .chat-fab:hover {
@@ -665,6 +687,7 @@ label {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    flex-shrink: 0;
 }
 
 .chat-header-title {
@@ -715,6 +738,7 @@ label {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    -webkit-overflow-scrolling: touch;
 }
 
 .chat-welcome {
@@ -734,6 +758,7 @@ label {
     font-size: 0.88rem;
     line-height: 1.6;
     animation: msgAppear 0.3s ease-out;
+    word-break: break-word;
 }
 
 @keyframes msgAppear {
@@ -778,6 +803,7 @@ label {
     display: flex;
     gap: 8px;
     background: rgba(18,18,18,0.5);
+    flex-shrink: 0;
 }
 
 .chat-input {
@@ -788,9 +814,10 @@ label {
     padding: 10px 14px;
     color: white;
     font-family: 'Inter', sans-serif;
-    font-size: 0.88rem;
+    font-size: 16px; /* Prevents iOS zoom */
     outline: none;
     transition: border-color 0.2s;
+    min-width: 0;
 }
 
 .chat-input:focus {
@@ -919,6 +946,7 @@ label {
     justify-content: center;
     transition: all 0.2s;
     flex-shrink: 0;
+    touch-action: manipulation;
 }
 
 .chat-send:hover {
@@ -938,13 +966,6 @@ label {
     border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
-
-/* Mobile Optimization */
-@media (max-width: 768px) {
-    .notes-panel { width: 100%; }
-    .chat-panel { width: calc(100vw - 48px); }
-    .controls-pill { bottom: 16px; }
-}
 
 /* ============================================= */
 /* FLOATING VIDEO PLAYER                         */
@@ -976,6 +997,8 @@ label {
     background: rgba(255, 255, 255, 0.03);
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     user-select: none;
+    -webkit-user-select: none;
+    touch-action: none; /* Handled by JS for dragging */
 }
 
 .video-player-container.minimized .video-player-header {
@@ -1009,8 +1032,8 @@ label {
 }
 
 .player-ctrl-btn {
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 6px;
@@ -1020,6 +1043,7 @@ label {
     align-items: center;
     justify-content: center;
     transition: all 0.2s;
+    touch-action: manipulation;
 }
 
 .player-ctrl-btn:hover {
@@ -1079,6 +1103,8 @@ label {
     gap: 8px;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 4px 12px rgba(255, 0, 0, 0.2);
+    touch-action: manipulation;
+    min-height: 44px;
 }
 
 .jump-btn:hover {
@@ -1100,11 +1126,12 @@ label {
     position: absolute;
     right: 4px;
     bottom: 4px;
-    width: 12px;
-    height: 12px;
+    width: 16px;
+    height: 16px;
     cursor: nwse-resize;
     background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.4) 50%);
     z-index: 110;
+    touch-action: none; /* Handled by JS */
 }
 
 /* Onboarding Guides - YouTube Specific */
@@ -1142,3 +1169,215 @@ label {
     100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); }
 }
 
+/* ============================================= */
+/* MOBILE: Notes card swipe handle               */
+/* ============================================= */
+.notes-swipe-handle {
+    display: none;
+}
+
+/* ============================================= */
+/* RESPONSIVE: TABLET (max-width: 1024px)        */
+/* ============================================= */
+@media (max-width: 1024px) {
+    .notes-card {
+        width: 400px;
+        right: 16px;
+    }
+
+    .chat-panel {
+        width: 340px;
+    }
+
+    .video-player-container {
+        width: 280px;
+    }
+
+    .video-player-container.minimized {
+        width: 180px;
+    }
+}
+
+/* ============================================= */
+/* RESPONSIVE: MOBILE (max-width: 768px)         */
+/* ============================================= */
+@media (max-width: 768px) {
+    /* App Header — compact */
+    .app-header {
+        height: 48px;
+        padding: 0 12px;
+    }
+
+    .btn-back {
+        width: 36px;
+        height: 36px;
+    }
+
+    .map-title {
+        font-size: 0.9rem;
+        max-width: 200px;
+    }
+
+    .map-subtitle {
+        font-size: 0.55rem;
+    }
+
+    /* Controls pill — smaller on mobile */
+    .controls-pill {
+        bottom: 16px;
+        padding: 4px 8px;
+        gap: 2px;
+    }
+
+    .ctrl-btn {
+        width: 32px;
+        height: 32px;
+    }
+
+    .pill-divider {
+        height: 16px;
+        margin: 0 2px;
+    }
+
+    /* Notes Card — fullscreen bottom sheet */
+    .notes-card {
+        position: fixed;
+        top: auto;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        max-width: 100%;
+        height: 85vh;
+        height: 85dvh;
+        border-radius: 20px 20px 0 0;
+        transform: translateY(0) scale(1);
+        z-index: 200;
+    }
+
+    .notes-card.hidden-card {
+        transform: translateY(100%) scale(1);
+        opacity: 1;
+    }
+
+    .notes-swipe-handle {
+        display: block;
+        width: 40px;
+        height: 4px;
+        background: rgba(255,255,255,0.2);
+        border-radius: 2px;
+        margin: 8px auto 4px;
+        flex-shrink: 0;
+    }
+
+    .notes-card-header {
+        padding: 12px 16px 12px;
+    }
+
+    .notes-card-actions {
+        padding: 12px 16px 0;
+    }
+
+    .notes-card-content {
+        padding: 16px;
+    }
+
+    /* Chat — full-width bottom sheet */
+    .chat-widget {
+        bottom: 16px;
+        left: 16px;
+    }
+
+    .chat-fab {
+        width: 48px;
+        height: 48px;
+    }
+
+    .chat-panel {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        height: 70vh;
+        height: 70dvh;
+        border-radius: 16px 16px 0 0;
+        transform-origin: bottom center;
+    }
+
+    .chat-panel.hidden-chat {
+        transform: translateY(100%);
+        opacity: 1;
+    }
+
+    .chat-input-area {
+        padding: 10px 12px;
+        /* Add safe area padding for iPhones */
+        padding-bottom: max(10px, env(safe-area-inset-bottom));
+    }
+
+    /* Video player — full width, not draggable */
+    .video-player-container {
+        position: fixed;
+        top: 48px; /* Below header */
+        left: 0;
+        right: 0;
+        width: 100% !important;
+        border-radius: 0;
+        z-index: 90;
+    }
+
+    .video-player-container.minimized {
+        width: 100% !important;
+    }
+
+    /* Hide resize handle on mobile */
+    .player-resize-handle {
+        display: none;
+    }
+
+    .video-player-header {
+        cursor: default;
+        touch-action: manipulation;
+    }
+
+    /* Hide onboarding guides on mobile */
+    .guide-hint {
+        display: none !important;
+    }
+}
+
+/* ============================================= */
+/* RESPONSIVE: SMALL MOBILE (max-width: 480px)   */
+/* ============================================= */
+@media (max-width: 480px) {
+    .app-header {
+        height: 44px;
+        padding: 0 10px;
+    }
+
+    .btn-back {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+    }
+
+    .map-title {
+        font-size: 0.85rem;
+        max-width: 160px;
+    }
+
+    .notes-card-info h2 {
+        font-size: 0.95rem;
+    }
+
+    .generate-btn {
+        font-size: 0.82rem;
+        padding: 10px 16px;
+    }
+
+    .chat-fab {
+        width: 44px;
+        height: 44px;
+    }
+}

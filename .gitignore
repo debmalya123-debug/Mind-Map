@@ -20,3 +20,7 @@ pip-delete-this-directory.txt
 # OS
 .DS_Store
 Thumbs.db
+
+api_and_tech_flows.md
+
+system_architecture_diagramss.md
