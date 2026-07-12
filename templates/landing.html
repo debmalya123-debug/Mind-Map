@@ -209,6 +209,18 @@
         </div>
     </section>
 
+    <!-- User Stats Banner -->
+    <div class="user-stats-banner reveal">
+        <div class="user-stats-wrapper">
+            <div class="stats-number-container">
+                <span class="stats-counter" data-target="{{ user_count }}">0</span>
+            </div>
+            <div class="stats-subtext">have registered already</div>
+            <div class="stats-tagline">Join now to synthesize your learning, master complex concepts, and map out your knowledge instantly.</div>
+            <a href="/dashboard" class="btn-primary stats-cta">Get Started Free ↗</a>
+        </div>
+    </div>
+
     <footer>
         <div>Made with ❤️ by Debmalya Paul</div>
         <div style="display:flex; gap:1rem;">
@@ -379,10 +391,47 @@
 
         // Scroll Reveal Trigger (Intersection Observer)
         const revealElements = document.querySelectorAll('.reveal');
+
+        function animateCounter(element) {
+            const target = parseInt(element.getAttribute('data-target'), 10);
+            if (isNaN(target) || target <= 0) {
+                element.textContent = '0';
+                return;
+            }
+            const duration = 2000; // 2 seconds animation
+            const startTime = performance.now();
+            
+            function update(currentTime) {
+                const elapsed = currentTime - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                
+                // Ease out cubic
+                const easeProgress = 1 - Math.pow(1 - progress, 3);
+                const currentCount = Math.floor(easeProgress * target);
+                
+                element.textContent = currentCount.toLocaleString();
+                
+                if (progress < 1) {
+                    requestAnimationFrame(update);
+                } else {
+                    element.textContent = target.toLocaleString();
+                }
+            }
+            
+            requestAnimationFrame(update);
+        }
+
         const revealObserver = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
                     entry.target.classList.add('active');
+                    
+                    // Trigger counter animation if element contains the stats counter
+                    const counter = entry.target.querySelector('.stats-counter');
+                    if (counter && !counter.classList.contains('animated')) {
+                        counter.classList.add('animated');
+                        animateCounter(counter);
+                    }
                 }
             });
         }, { threshold: 0.1 });

@@ -212,7 +212,12 @@ class MindMapData(TypedDict):
 
 @app.route('/')
 def landing():
-    return render_template('landing.html')
+    try:
+        user_count = User.query.count()
+    except Exception as e:
+        print(f"Error querying user count: {e}")
+        user_count = 0
+    return render_template('landing.html', user_count=user_count)
 
 @app.route('/dashboard')
 @login_required

@@ -493,6 +493,82 @@ body {
     border-radius: 4px;
 }
 
+/* User Stats Banner */
+.user-stats-banner {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 6rem 2rem 8rem 2rem;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+}
+
+.user-stats-wrapper {
+    background: rgba(255, 255, 255, 0.01);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    padding: 3.5rem 2rem;
+    border-radius: 2rem;
+    max-width: 600px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    transition: border-color 0.4s, transform 0.4s, box-shadow 0.4s;
+}
+
+.user-stats-wrapper:hover {
+    border-color: rgba(204, 255, 0, 0.25);
+    transform: translateY(-4px);
+    box-shadow: 0 40px 80px rgba(0, 0, 0, 0.7), 0 0 40px rgba(204, 255, 0, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.stats-number-container {
+    margin-bottom: 0.75rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.stats-counter {
+    font-size: clamp(3rem, 12vw, 5rem);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    background: linear-gradient(135deg, var(--accent) 0%, #88aa00 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 30px rgba(204, 255, 0, 0.2));
+    display: inline-block;
+}
+
+.stats-subtext {
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    margin-bottom: 1.5rem;
+}
+
+.stats-tagline {
+    font-size: 1rem;
+    color: var(--text-dim);
+    line-height: 1.6;
+    margin-bottom: 2.5rem;
+    max-width: 480px;
+}
+
+.stats-cta {
+    padding: 0.8rem 2.2rem;
+    font-size: 0.95rem;
+    box-shadow: 0 10px 20px rgba(255, 255, 255, 0.05);
+}
+
 /* Footer */
 footer {
     display: flex;
