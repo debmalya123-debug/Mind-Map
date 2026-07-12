@@ -31,7 +31,7 @@ graph TB
         GeminiSDK["Google GenAI Client"]
     end
 
-    database DB[("SQLite/PostgreSQL DB")]
+    DB[("SQLite/PostgreSQL DB")]
 
     subgraph External ["External Services"]
         GoogleOAuth["Google OAuth 2.0 Server"]
